@@ -1,7 +1,7 @@
 # Transport Draa Lasfar & Koudiat Aicha
 
 Application web (site statique) de gestion du **personnel transporté** vers les sites
-**Draa Lasfar** et **Koudiat Aicha** (bus / minibus / cars électriques — CMG / TECHSUB).
+**Draa Lasfar** et **Koudiat Aicha** (bus / minibus électriques — CMG / TECHSUB).
 
 Construite comme SAMIR : **HTML + JavaScript + Firebase (Firestore)**, sans build,
 déployable gratuitement sur **GitHub Pages**.
