@@ -36,13 +36,13 @@ const GEO = {
 
 const SAMPLE = [
   { nom: "LARHRISSI", prenom: "REDOUAN", lieuDepart: "AFAK", service: "EXTRACTION", trajet: "DAR SALAM", societe: "CMG", typeTransport: "BUS", qte: 1, poste: "3" },
-  { nom: "ABAJBAJ", prenom: "ABDELLKABIR", lieuDepart: "AFAK", service: "Maintenance", trajet: "DAR SALAM", societe: "CMG", typeTransport: "CAR", qte: 1, poste: "1" },
+  { nom: "ABAJBAJ", prenom: "ABDELLKABIR", lieuDepart: "AFAK", service: "Maintenance", trajet: "DAR SALAM", societe: "CMG", typeTransport: "MINI BUS", qte: 1, poste: "1" },
   { nom: "OUJADDOUR", prenom: "AHMED", lieuDepart: "DAR SALAM", service: "EXTRACTION", trajet: "DAR SALAM", societe: "CMG", typeTransport: "BUS", qte: 1, poste: "1" },
-  { nom: "CHAKIRI", prenom: "MOHAMMED", lieuDepart: "AFAK", service: "DSN", trajet: "MHAMID 10", societe: "CMG", typeTransport: "CAR", qte: 1, poste: "2" },
+  { nom: "CHAKIRI", prenom: "MOHAMMED", lieuDepart: "AFAK", service: "DSN", trajet: "MHAMID 10", societe: "CMG", typeTransport: "MINI BUS", qte: 1, poste: "2" },
   { nom: "LADIB", prenom: "MOHAMED", lieuDepart: "MASSIRA 3", service: "Maintenance", trajet: "COCA", societe: "CMG", typeTransport: "MINI BUS", qte: 1, poste: "2" },
   { nom: "OUMHIND", prenom: "ABDELAZIZ", lieuDepart: "CHATR 6", service: "MAINTENANCE", trajet: "TAMANSOURT", societe: "CMG", typeTransport: "MINI BUS", qte: 1, poste: "3" },
   { nom: "AIT AISSA", prenom: "LAHCEN", lieuDepart: "MOSQEE AMINA", service: "EXTRACTION", trajet: "TAMANSOURT", societe: "CMG", typeTransport: "MINI BUS", qte: 1, poste: "2" },
-  { nom: "BEN TALEB", prenom: "SAID", lieuDepart: "MASSIRA 1", service: "TECHSUB", trajet: "COCA", societe: "TECHSUB", typeTransport: "CAR", qte: 1, poste: "3" },
+  { nom: "BEN TALEB", prenom: "SAID", lieuDepart: "MASSIRA 1", service: "TECHSUB", trajet: "COCA", societe: "TECHSUB", typeTransport: "BUS", qte: 1, poste: "3" },
 ];
 
 /* --- Helpers --- */
@@ -177,7 +177,6 @@ function renderDashboard() {
   const total = RECORDS.length;
   const bus = RECORDS.filter((r) => norm(r.typeTransport) === "BUS").length;
   const mini = RECORDS.filter((r) => norm(r.typeTransport).includes("MINI")).length;
-  const car = RECORDS.filter((r) => norm(r.typeTransport) === "CAR").length;
   const departs = uniq("lieuDepart").length;
   const trajets = uniq("trajet").length;
   const kpi = [
@@ -186,10 +185,9 @@ function renderDashboard() {
     ["bi-geo-alt-fill", trajets, "Trajets"],
     ["bi-bus-front", bus, "Bus"],
     ["bi-truck-front", mini, "Mini bus"],
-    ["bi-car-front", car, "Cars"],
   ];
   el("kpis").innerHTML = kpi.map(([ic, v, l]) => `
-    <div class="col-6 col-md-4 col-xl-2">
+    <div class="col-6 col-md-4 col-xl-3">
       <div class="kpi-card"><div class="kpi-value"><i class="bi ${ic}"></i> ${v}</div>
       <div class="kpi-label">${l}</div></div></div>`).join("");
 
