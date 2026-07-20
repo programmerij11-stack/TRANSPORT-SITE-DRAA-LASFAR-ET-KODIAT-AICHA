@@ -156,10 +156,24 @@
 
   <!-- CARTE -->
   <section class="section" id="carte">
+    <div class="card-dark p-3 mb-3">
+      <div class="row g-2 align-items-center">
+        <div class="col-md-5">
+          <label class="form-label mb-1" style="font-size:.82rem;color:#7fae91">Choisir un trajet à isoler</label>
+          <select class="form-select" id="mapTrajet"><option value="">Tous les trajets</option></select>
+        </div>
+        <div class="col-md-4 d-flex align-items-end gap-2 pt-3">
+          <button class="btn btn-outline-light btn-sm" id="animToggle" onclick="toggleAnim()"><i class="bi bi-pause-fill"></i> Animation</button>
+        </div>
+        <div class="col-md-3 text-md-end pt-3" style="font-size:.8rem;color:#8fb7a1">
+          <span style="color:#3b82f6">●</span> Départ &nbsp; <span style="color:#ef4444">●</span> Destination &nbsp; 🚌 Bus &nbsp; 🚐 Mini bus
+        </div>
+      </div>
+    </div>
     <div class="card-dark p-2"><div id="map"></div></div>
     <p class="mt-2" style="font-size:.85rem;color:#7fae91">
-      Points de depart et destinations. Les lieux sans coordonnees connues n'apparaissent pas sur la carte
-      (vous pouvez ajuster le dictionnaire des lieux dans <code>app.js</code>).
+      Sélectionne un trajet pour l'afficher isolé, avec les véhicules qui circulent en animation.
+      Les lieux sans coordonnées connues n'apparaissent pas (dictionnaire ajustable dans <code>app.js</code>).
     </p>
   </section>
 </div>

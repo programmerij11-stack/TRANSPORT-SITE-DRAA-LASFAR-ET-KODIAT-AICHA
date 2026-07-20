@@ -32,6 +32,49 @@ const GEO = {
   "MASSIRA 1": [31.64, -8.03],
   "MASSIRA 3": [31.645, -8.035],
   "DRAA LASFAR": [31.55, -8.16],
+  // Zone Mhamid / sud-ouest
+  "MHAMID 7": [31.586, -8.048],
+  "MHAMID 9": [31.578, -8.058],
+  "BOUAAKAZ": [31.588, -8.06],
+  "FARANE TRAB": [31.59, -8.045],
+  "GLACEMAR": [31.575, -8.043],
+  "AZLI": [31.6, -8.04],
+  "FKHARA": [31.605, -8.06],
+  // Zone centre Marrakech
+  "KANTRA": [31.63, -7.986],
+  "ANBAR": [31.638, -7.99],
+  "WILAYA": [31.626, -8.0],
+  "JAMAA": [31.625, -7.989],
+  "SOUK RBII": [31.642, -7.995],
+  "MSALA": [31.62, -7.995],
+  "OIL LIBYA": [31.648, -8.0],
+  "DOHHA": [31.634, -7.978],
+  "LIBRERAIE": [31.629, -7.992],
+  "SIDI MBAREK": [31.622, -7.982],
+  "KHALD": [31.645, -7.985],
+  "NAKHIL": [31.655, -7.97],
+  "INARA": [31.618, -8.005],
+  "HAMAM MOGADOUR": [31.631, -7.996],
+  "FERAILLE": [31.615, -7.998],
+  "HANOUT LHEHDI": [31.627, -7.984],
+  "PHARMACIE FERDAWSS": [31.64, -7.982],
+  "CAFE FINJANE": [31.636, -7.988],
+  "ECOLE MANFALOUTI": [31.633, -7.993],
+  "BOULANGERIE AMAL": [31.637, -7.997],
+  "MOSQEE AMINA": [31.643, -7.991],
+  "SYBA": [31.612, -7.99],
+  "NOHA": [31.608, -7.985],
+  "JBILAT": [31.66, -7.99],
+  "AZZOUZIA": [31.66, -8.03],
+  "DOUAR": [31.62, -8.02],
+  "REZEAU": [31.7, -8.135],
+  // Zone Tamansourt
+  "CHATR 2": [31.695, -8.13],
+  "CHATR 4": [31.698, -8.138],
+  "CHATR 5": [31.702, -8.142],
+  "CHATR 6": [31.7, -8.148],
+  "CHATR 7": [31.704, -8.15],
+  "CHATR 8": [31.706, -8.146],
 };
 
 const SAMPLE = [
@@ -233,38 +276,107 @@ function renderLignes() {
 
 /* --- Carte --- */
 let map = null, layer = null;
+let vehicles = [];          // { marker, path, t, speed }
+let animId = null, animOn = true;
+
+function vehicleIcon(type) {
+  const n = norm(type);
+  const emoji = n.includes("MINI") ? "🚐" : "🚌";
+  return L.divIcon({
+    className: "veh-icon",
+    html: `<div style="font-size:22px;line-height:22px;filter:drop-shadow(0 0 3px #000)">${emoji}</div>`,
+    iconSize: [24, 24], iconAnchor: [12, 12],
+  });
+}
+function lerp(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]; }
+
+function animateStep() {
+  vehicles.forEach((v) => {
+    v.t += v.speed;
+    if (v.t >= 1) v.t = 0;               // boucle : repart du depart
+    v.marker.setLatLng(lerp(v.path[0], v.path[1], v.t));
+  });
+  animId = requestAnimationFrame(animateStep);
+}
+function startAnim() {
+  if (animId) cancelAnimationFrame(animId);
+  if (animOn && vehicles.length) animId = requestAnimationFrame(animateStep);
+}
+function toggleAnim() {
+  animOn = !animOn;
+  el("animToggle").innerHTML = animOn
+    ? '<i class="bi bi-pause-fill"></i> Animation'
+    : '<i class="bi bi-play-fill"></i> Animation';
+  if (animOn) startAnim(); else if (animId) { cancelAnimationFrame(animId); animId = null; }
+}
+
+function buildTrajetSelect() {
+  const sel = el("mapTrajet"); if (!sel) return;
+  const cur = sel.value;
+  const vals = uniq("trajet");
+  sel.innerHTML = `<option value="">Tous les trajets</option>` +
+    vals.map((v) => `<option>${v}</option>`).join("");
+  if (vals.includes(cur)) sel.value = cur;
+}
+
 function renderMap() {
   if (!map) {
-    map = L.map("map").setView([31.63, -8.03], 11);
+    map = L.map("map").setView([31.63, -8.03], 12);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: "&copy; OpenStreetMap",
     }).addTo(map);
   }
+  buildTrajetSelect();
+  if (animId) { cancelAnimationFrame(animId); animId = null; }
+  vehicles = [];
   if (layer) layer.remove();
   layer = L.layerGroup().addTo(map);
 
+  const only = el("mapTrajet") ? el("mapTrajet").value : "";
+  const recs = only ? RECORDS.filter((r) => r.trajet === only) : RECORDS;
+
+  // Regroupe par (depart -> destination)
   const pairs = {};
-  RECORDS.forEach((r) => {
-    const dep = GEO[norm(r.lieuDepart)], dest = GEO[norm(r.trajet)];
+  recs.forEach((r) => {
     const key = `${norm(r.lieuDepart)}||${norm(r.trajet)}`;
-    if (!pairs[key]) pairs[key] = { dep, dest, depName: r.lieuDepart, destName: r.trajet, count: 0 };
+    if (!pairs[key]) {
+      pairs[key] = {
+        dep: GEO[norm(r.lieuDepart)], dest: GEO[norm(r.trajet)],
+        depName: r.lieuDepart, destName: r.trajet,
+        type: r.typeTransport, count: 0,
+      };
+    }
     pairs[key].count++;
   });
+
+  const bounds = [];
   const seen = new Set();
   Object.values(pairs).forEach((p) => {
     if (p.dep && p.dest) {
-      L.polyline([p.dep, p.dest], { color: "#22c55e", weight: 3, opacity: .6 }).addTo(layer);
+      L.polyline([p.dep, p.dest], {
+        color: norm(p.type).includes("MINI") ? "#22c55e" : "#3b82f6",
+        weight: 3, opacity: .55, dashArray: "6 6",
+      }).addTo(layer);
+      // vehicule anime sur ce trajet
+      const m = L.marker(p.dep, { icon: vehicleIcon(p.type) })
+        .bindTooltip(`${p.depName} → ${p.destName} (${p.count})`).addTo(layer);
+      vehicles.push({ marker: m, path: [p.dep, p.dest], t: Math.random(), speed: 0.0016 + Math.random() * 0.0012 });
+      bounds.push(p.dep, p.dest);
     }
     [["dep", "#3b82f6"], ["dest", "#ef4444"]].forEach(([k, col]) => {
       const c = p[k]; const nm = k === "dep" ? p.depName : p.destName;
       if (c && !seen.has(nm)) {
         seen.add(nm);
-        L.circleMarker(c, { radius: 8, color: "#fff", weight: 2, fillColor: col, fillOpacity: 1 })
+        L.circleMarker(c, { radius: k === "dest" ? 9 : 7, color: "#fff", weight: 2, fillColor: col, fillOpacity: 1 })
           .bindPopup(`<b>${nm}</b>`).addTo(layer);
+        bounds.push(c);
       }
     });
   });
+
+  if (bounds.length) map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
   setTimeout(() => map.invalidateSize(), 100);
+  startAnim();
 }
 
 /* --- CRUD --- */
@@ -433,6 +545,7 @@ document.querySelectorAll(".nav-link").forEach((btn) => {
 });
 ["q", "fDepart", "fTrajet", "fType", "fPoste"].forEach((id) =>
   el(id).addEventListener("input", renderTable));
+el("mapTrajet").addEventListener("change", renderMap);
 
 /* --- Init --- */
 window.addEventListener("DOMContentLoaded", () => {
