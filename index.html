@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Transport Draa Lasfar &amp; Koudiat Aicha</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="firebase-config.js"></script>
+  <style>
+    :root{--primary:#04140c;--accent:#22c55e;--accent2:#16a34a;--bg-dark:#050a07;--bg-card:#0c1611;--text-light:#e7f2ec}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg-dark);color:var(--text-light);font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh;background-image:radial-gradient(ellipse at 20% 50%,rgba(34,197,94,.05) 0%,transparent 60%),radial-gradient(ellipse at 80% 20%,rgba(34,197,94,.05) 0%,transparent 60%)}
+    a{color:var(--accent)}
+    .sidebar{width:250px;background:#040b07;min-height:100vh;position:fixed;left:0;top:0;border-right:1px solid rgba(34,197,94,.2);transition:transform .3s;z-index:1000}
+    .sidebar-brand{padding:1.25rem;border-bottom:1px solid rgba(34,197,94,.2);display:flex;align-items:center;gap:.6rem}
+    .sidebar-brand i{font-size:1.5rem;color:var(--accent)}
+    .sidebar-brand span{font-weight:700;font-size:1rem;line-height:1.1}
+    .sidebar-brand small{display:block;color:#7fae91;font-weight:400;font-size:.72rem}
+    .nav-link{color:#8fb7a1;padding:.85rem 1.35rem;display:flex;align-items:center;gap:.7rem;transition:all .2s;cursor:pointer;border:none;background:none;width:100%;text-align:left;font-size:.95rem}
+    .nav-link:hover,.nav-link.active{background:rgba(34,197,94,.12);color:var(--accent);border-right:3px solid var(--accent)}
+    .main-content{margin-left:250px;padding:1.25rem;min-height:100vh}
+    .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;padding-bottom:.9rem;border-bottom:1px solid rgba(34,197,94,.2);gap:1rem;flex-wrap:wrap}
+    .topbar h4{margin:0;color:var(--accent);font-weight:700}
+    .kpi-card{background:var(--bg-card);border-radius:.75rem;padding:1.1rem 1.25rem;border-left:4px solid var(--accent);box-shadow:0 4px 20px rgba(0,0,0,.5)}
+    .kpi-value{font-size:1.7rem;font-weight:700;color:var(--accent);line-height:1}
+    .kpi-label{font-size:.8rem;color:#94a3b8;text-transform:uppercase;margin-top:.35rem}
+    .card-dark{background:var(--bg-card);border:1px solid rgba(34,197,94,.18);border-radius:.75rem}
+    .form-control,.form-select{background:#08120c;border:1px solid rgba(34,197,94,.25);color:var(--text-light)}
+    .form-control:focus,.form-select:focus{background:#08120c;border-color:var(--accent);color:var(--text-light);box-shadow:0 0 0 .15rem rgba(34,197,94,.2)}
+    .form-control::placeholder{color:#5c7d68}
+    .btn-primary{background:linear-gradient(135deg,#22c55e,#16a34a);border:none;color:#04140c;font-weight:700}
+    .btn-primary:hover{background:linear-gradient(135deg,#34d777,#1eb257);color:#04140c}
+    .btn-outline-light{border-color:rgba(34,197,94,.4);color:var(--text-light)}
+    .btn-outline-light:hover{background:rgba(34,197,94,.15);border-color:var(--accent);color:var(--text-light)}
+    .table-dark{--bs-table-bg:transparent;--bs-table-color:var(--text-light);--bs-table-border-color:rgba(34,197,94,.15)}
+    .table-dark thead th{color:#7ee2a4;font-weight:600;font-size:.82rem;border-bottom:2px solid rgba(34,197,94,.3);text-transform:uppercase;position:sticky;top:0;background:#0c1611;z-index:2}
+    .table-dark tbody tr:hover{background:rgba(34,197,94,.06)!important}
+    .section{display:none}.section.active{display:block;animation:fadeIn .35s}
+    @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+    .badge-t{padding:.32em .7em;border-radius:.5rem;font-size:.75rem;font-weight:600}
+    .t-bus{background:rgba(59,130,246,.16);color:#60a5fa}
+    .t-minibus{background:rgba(34,197,94,.16);color:#4ade80}
+    .t-car{background:rgba(234,179,8,.16);color:#eab308}
+    .modal-content{background:var(--bg-card);color:var(--text-light);border:1px solid rgba(34,197,94,.25)}
+    .modal-header,.modal-footer{border-color:rgba(34,197,94,.2)}
+    .table-wrap{max-height:65vh;overflow:auto}
+    #map{height:62vh;border-radius:.75rem;border:1px solid rgba(34,197,94,.25)}
+    .leaflet-popup-content-wrapper,.leaflet-popup-tip{background:#0c1611;color:var(--text-light)}
+    #loadingOverlay{position:fixed;inset:0;background:rgba(5,10,7,.94);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem}
+    .spinner{width:48px;height:48px;border:4px solid rgba(34,197,94,.2);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    #fbStatus{position:fixed;bottom:1rem;right:1rem;font-size:.75rem;padding:.35rem .75rem;border-radius:.5rem;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);color:var(--accent);z-index:9998}
+    .menu-toggle{display:none}
+    .line-card{background:var(--bg-card);border:1px solid rgba(34,197,94,.18);border-radius:.75rem;padding:1rem 1.15rem;height:100%}
+    .line-card .dep{font-weight:700;font-size:1.05rem}
+    .chip{display:inline-block;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.2);border-radius:1rem;padding:.15rem .6rem;font-size:.78rem;margin:.15rem .2rem 0 0}
+    @media(max-width:768px){.sidebar{transform:translateX(-250px)}.sidebar.show{transform:translateX(0)}.main-content{margin-left:0}.menu-toggle{display:inline-flex}}
+  </style>
+</head>
+<body>
+<div id="loadingOverlay">
+  <div class="spinner"></div>
+  <div style="color:var(--accent);font-weight:600">Connexion a Firebase...</div>
+  <div style="color:#7fae91;font-size:.85rem">Chargement des donnees</div>
+</div>
+
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-brand">
+    <i class="bi bi-bus-front"></i>
+    <span>Transport<small>Draa Lasfar &amp; Koudiat Aicha</small></span>
+  </div>
+  <nav class="mt-2">
+    <button class="nav-link active" data-section="dashboard"><i class="bi bi-speedometer2"></i> Tableau de bord</button>
+    <button class="nav-link" data-section="personnel"><i class="bi bi-people-fill"></i> Personnel</button>
+    <button class="nav-link" data-section="lignes"><i class="bi bi-signpost-split"></i> Departs &amp; Lignes</button>
+    <button class="nav-link" data-section="carte"><i class="bi bi-map"></i> Carte</button>
+  </nav>
+  <div class="px-3 mt-4">
+    <button class="btn btn-primary w-100 mb-2" onclick="openForm()"><i class="bi bi-plus-lg"></i> Ajouter</button>
+    <label class="btn btn-outline-light w-100 mb-2 mb-0">
+      <i class="bi bi-file-earmark-excel"></i> Importer Excel
+      <input type="file" id="importFile" accept=".xlsx,.xls,.csv" hidden>
+    </label>
+    <button class="btn btn-outline-light w-100" onclick="exportExcel()"><i class="bi bi-download"></i> Exporter Excel</button>
+  </div>
+</aside>
+
+<div class="main-content">
+  <div class="topbar">
+    <div class="d-flex align-items-center gap-2">
+      <button class="btn btn-outline-light menu-toggle" onclick="document.getElementById('sidebar').classList.toggle('show')"><i class="bi bi-list"></i></button>
+      <h4 id="pageTitle">Tableau de bord</h4>
+    </div>
+    <div class="text-end" style="font-size:.85rem;color:#7fae91">
+      <i class="bi bi-database-check"></i> <span id="countBadge">0</span> agents
+    </div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <section class="section active" id="dashboard">
+    <div class="row g-3 mb-3" id="kpis"></div>
+    <div class="row g-3">
+      <div class="col-lg-6">
+        <div class="card-dark p-3 h-100">
+          <h6 class="text-uppercase" style="color:var(--accent)">Agents par trajet (destination)</h6>
+          <div id="byTrajet"></div>
+        </div>
+      </div>
+      <div class="col-lg-6">
+        <div class="card-dark p-3 h-100">
+          <h6 class="text-uppercase" style="color:var(--accent)">Agents par type de transport</h6>
+          <div id="byType"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PERSONNEL -->
+  <section class="section" id="personnel">
+    <div class="card-dark p-3 mb-3">
+      <div class="row g-2 align-items-end">
+        <div class="col-md-3"><input class="form-control" id="q" placeholder="Rechercher nom, prenom..."></div>
+        <div class="col-md-2"><select class="form-select" id="fDepart"><option value="">Lieu depart</option></select></div>
+        <div class="col-md-2"><select class="form-select" id="fTrajet"><option value="">Trajet</option></select></div>
+        <div class="col-md-2"><select class="form-select" id="fType"><option value="">Type transport</option></select></div>
+        <div class="col-md-2"><select class="form-select" id="fPoste"><option value="">Poste</option></select></div>
+        <div class="col-md-1"><button class="btn btn-outline-light w-100" onclick="resetFilters()"><i class="bi bi-x-circle"></i></button></div>
+      </div>
+    </div>
+    <div class="card-dark p-2">
+      <div class="table-wrap">
+        <table class="table table-dark table-hover align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Nom</th><th>Prenom</th><th>Lieu depart</th><th>Service</th>
+              <th>Trajet</th><th>Societe</th><th>Type</th><th>Qte</th><th>Poste</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- LIGNES -->
+  <section class="section" id="lignes">
+    <div class="row g-3" id="lignesGrid"></div>
+  </section>
+
+  <!-- CARTE -->
+  <section class="section" id="carte">
+    <div class="card-dark p-2"><div id="map"></div></div>
+    <p class="mt-2" style="font-size:.85rem;color:#7fae91">
+      Points de depart et destinations. Les lieux sans coordonnees connues n'apparaissent pas sur la carte
+      (vous pouvez ajuster le dictionnaire des lieux dans <code>app.js</code>).
+    </p>
+  </section>
+</div>
+
+<!-- MODAL FORM -->
+<div class="modal fade" id="formModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="formTitle">Ajouter un agent</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="f_id">
+        <div class="row g-3">
+          <div class="col-md-6"><label class="form-label">Nom</label><input class="form-control" id="f_nom"></div>
+          <div class="col-md-6"><label class="form-label">Prenom</label><input class="form-control" id="f_prenom"></div>
+          <div class="col-md-6"><label class="form-label">Lieu de depart</label><input class="form-control" id="f_lieuDepart" list="dl_depart"><datalist id="dl_depart"></datalist></div>
+          <div class="col-md-6"><label class="form-label">Service</label><input class="form-control" id="f_service" list="dl_service"><datalist id="dl_service"></datalist></div>
+          <div class="col-md-6"><label class="form-label">Trajet (destination)</label><input class="form-control" id="f_trajet" list="dl_trajet"><datalist id="dl_trajet"></datalist></div>
+          <div class="col-md-6"><label class="form-label">Societe</label><input class="form-control" id="f_societe" list="dl_societe" value="CMG"><datalist id="dl_societe"></datalist></div>
+          <div class="col-md-4"><label class="form-label">Type de transport</label>
+            <select class="form-select" id="f_typeTransport"><option>BUS</option><option>MINI BUS</option><option>CAR</option></select>
+          </div>
+          <div class="col-md-4"><label class="form-label">Quantite</label><input type="number" class="form-control" id="f_qte" value="1"></div>
+          <div class="col-md-4"><label class="form-label">Poste</label>
+            <select class="form-select" id="f_poste"><option value="1">1</option><option value="2">2</option><option value="3">3</option></select>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-light" data-bs-dismiss="modal">Annuler</button>
+        <button class="btn btn-primary" onclick="saveForm()"><i class="bi bi-check-lg"></i> Enregistrer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="fbStatus"><i class="bi bi-cloud-check"></i> Synchronise</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
