@@ -356,15 +356,38 @@ function mapRow(row) {
   out.typeTransport = (out.typeTransport || "").toString().trim().toUpperCase();
   return out;
 }
+// Detecte la ligne d'en-tete (celle qui contient NOM et PRENOM), meme si
+// des lignes de titre / cellules fusionnees se trouvent au-dessus.
+function rowsFromSheet(ws) {
+  const grid = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+  let hIdx = -1;
+  for (let i = 0; i < Math.min(grid.length, 15); i++) {
+    const cells = grid[i].map((c) => norm(c));
+    if (cells.includes("NOM") && cells.includes("PRENOM")) { hIdx = i; break; }
+  }
+  if (hIdx === -1) return { rows: [], headers: (grid[0] || []).map(String) };
+  const headers = grid[hIdx];
+  const rows = grid.slice(hIdx + 1).map((arr) => {
+    const o = {};
+    headers.forEach((h, j) => { o[h] = arr[j] ?? ""; });
+    return o;
+  });
+  return { rows, headers: headers.map(String) };
+}
 el("importFile").addEventListener("change", async (e) => {
   const file = e.target.files[0]; if (!file) return;
   try {
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf, { type: "array" });
     const ws = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
+    const { rows, headers } = rowsFromSheet(ws);
     const mapped = rows.map(mapRow).filter((r) => r.nom || r.prenom);
-    if (!mapped.length) { alert("Aucune ligne exploitable trouvee."); return; }
+    if (!mapped.length) {
+      alert("Aucune ligne exploitable.\n\nColonnes detectees : " +
+        (headers.filter(Boolean).join(", ") || "(aucune)") +
+        "\n\nAssurez-vous d'avoir les colonnes NOM et PRENOM.");
+      return;
+    }
     if (!confirm(`Importer ${mapped.length} agents depuis "${file.name}" ?`)) return;
     setStatus("Import en cours...");
     for (let i = 0; i < mapped.length; i += 400) {
