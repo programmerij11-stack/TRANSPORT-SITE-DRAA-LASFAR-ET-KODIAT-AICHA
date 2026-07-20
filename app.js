@@ -175,8 +175,11 @@ function groupCount(field) {
 }
 function renderDashboard() {
   const total = RECORDS.length;
-  const bus = RECORDS.filter((r) => norm(r.typeTransport) === "BUS").length;
   const mini = RECORDS.filter((r) => norm(r.typeTransport).includes("MINI")).length;
+  const bus = RECORDS.filter((r) => {
+    const t = norm(r.typeTransport);
+    return t.startsWith("BUS") && !t.includes("MINI");
+  }).length;
   const departs = uniq("lieuDepart").length;
   const trajets = uniq("trajet").length;
   const kpi = [
