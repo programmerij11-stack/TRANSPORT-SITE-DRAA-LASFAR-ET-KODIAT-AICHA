@@ -319,6 +319,24 @@ async function loadSamples() {
   await batch.commit();
 }
 
+/* --- Vider toute la liste --- */
+async function clearAll() {
+  if (!RECORDS.length) { alert("La liste est deja vide."); return; }
+  if (!confirm(`Supprimer DEFINITIVEMENT les ${RECORDS.length} agents ?\nCette action est irreversible.`)) return;
+  if (!confirm("Confirmer une derniere fois : tout supprimer ?")) return;
+  setStatus("Suppression en cours...");
+  try {
+    const ids = RECORDS.map((r) => r.id);
+    for (let i = 0; i < ids.length; i += 400) {
+      const batch = db.batch();
+      ids.slice(i, i + 400).forEach((id) => batch.delete(db.collection(COLLECTION).doc(id)));
+      await batch.commit();
+    }
+    setStatus("Synchronise");
+    alert("Liste videe.");
+  } catch (e) { alert("Erreur: " + e.message); }
+}
+
 /* --- Import Excel --- */
 const HEADER_MAP = {
   NOM: "nom", PRENOM: "prenom", "LIEU DEPART": "lieuDepart", "LIEU DE DEPART": "lieuDepart",
