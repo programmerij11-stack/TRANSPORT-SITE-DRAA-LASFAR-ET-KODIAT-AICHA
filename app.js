@@ -77,6 +77,12 @@ const GEO = {
   "CHATR 8": [31.706, -8.146],
 };
 
+/* --- Destination finale commune : la mine de Draa Lasfar --- */
+const MINE = {
+  name: "Mine Draa Lasfar",
+  coord: [31.71116466608541, -8.134161265753367],
+};
+
 const SAMPLE = [
   { nom: "LARHRISSI", prenom: "REDOUAN", lieuDepart: "AFAK", service: "EXTRACTION", trajet: "DAR SALAM", societe: "CMG", typeTransport: "BUS", qte: 1, poste: "3" },
   { nom: "ABAJBAJ", prenom: "ABDELLKABIR", lieuDepart: "AFAK", service: "Maintenance", trajet: "DAR SALAM", societe: "CMG", typeTransport: "MINI BUS", qte: 1, poste: "1" },
@@ -245,30 +251,37 @@ function renderDashboard() {
     || `<p class="text-muted small mb-0">Aucune donnee</p>`;
 }
 
-/* --- Departs & Lignes --- */
+/* --- Departs & Lignes ---
+   Chaque bus / mini bus a sa propre ligne (depart -> regroupement -> mine),
+   pour bien identifier les points de depart de chaque vehicule. */
+function vehicleEmoji(type) {
+  return norm(type).includes("MINI") ? "🚐" : "🚌";
+}
 function renderLignes() {
   const m = {};
   RECORDS.forEach((r) => {
-    const key = `${r.lieuDepart || "—"}||${r.trajet || "—"}`;
-    if (!m[key]) m[key] = { dep: r.lieuDepart || "—", dest: r.trajet || "—", count: 0, types: {}, services: {} };
+    const type = r.typeTransport || "—";
+    const key = `${r.lieuDepart || "—"}||${r.trajet || "—"}||${norm(type)}`;
+    if (!m[key]) m[key] = { dep: r.lieuDepart || "—", dest: r.trajet || "—", type, count: 0, services: {} };
     m[key].count++;
-    const t = r.typeTransport || "—"; m[key].types[t] = (m[key].types[t] || 0) + 1;
     if (r.service) m[key].services[r.service] = (m[key].services[r.service] || 0) + 1;
   });
-  const list = Object.values(m).sort((a, b) => b.count - a.count);
+  const list = Object.values(m).sort((a, b) =>
+    (norm(a.dep) + norm(a.type)).localeCompare(norm(b.dep) + norm(b.type)));
   el("lignesGrid").innerHTML = list.map((g) => `
     <div class="col-md-6 col-xl-4">
       <div class="line-card">
         <div class="d-flex justify-content-between align-items-start">
-          <div><div class="dep"><i class="bi bi-geo-alt-fill text-success"></i> ${g.dep}</div>
-          <div style="color:#7fae91;font-size:.85rem"><i class="bi bi-arrow-right"></i> ${g.dest}</div></div>
-          <span class="badge-t t-minibus">${g.count} agents</span>
+          <div>
+            <div class="dep"><i class="bi bi-geo-alt-fill text-success"></i> ${g.dep}</div>
+            <div style="color:#7fae91;font-size:.85rem"><i class="bi bi-arrow-right"></i> ${g.dest}</div>
+            <div style="color:#f59e0b;font-size:.8rem"><i class="bi bi-flag-fill"></i> Arrivée : ${MINE.name}</div>
+          </div>
+          <span class="badge-t ${typeClass(g.type)}">${vehicleEmoji(g.type)} ${g.type}</span>
         </div>
         <div class="mt-2">
-          ${Object.entries(g.types).map(([t, c]) => `<span class="chip">${t}: ${c}</span>`).join("")}
-        </div>
-        <div class="mt-2" style="font-size:.78rem;color:#8fb7a1">
-          ${Object.keys(g.services).slice(0, 6).join(" · ") || ""}
+          <span class="chip">${g.count} agents</span>
+          ${Object.keys(g.services).slice(0, 6).map((s) => `<span class="chip">${s}</span>`).join("")}
         </div>
       </div>
     </div>`).join("") || `<p class="text-muted">Aucune ligne. Ajoutez des agents.</p>`;
@@ -288,13 +301,35 @@ function vehicleIcon(type) {
     iconSize: [24, 24], iconAnchor: [12, 12],
   });
 }
+function mineIcon() {
+  return L.divIcon({
+    className: "mine-icon",
+    html: `<div style="font-size:26px;line-height:26px;filter:drop-shadow(0 0 4px #000)">⛏️</div>`,
+    iconSize: [28, 28], iconAnchor: [14, 14],
+  });
+}
 function lerp(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]; }
+function segDist(a, b) { const dx = a[0] - b[0], dy = a[1] - b[1]; return Math.sqrt(dx * dx + dy * dy); }
+
+/* Position sur un trajet multi-segments (depart -> ... -> mine) selon t (0..1) */
+function pointOnPath(path, t) {
+  if (path.length < 2) return path[0];
+  const segs = []; let total = 0;
+  for (let i = 1; i < path.length; i++) { const d = segDist(path[i - 1], path[i]); segs.push(d); total += d; }
+  if (total === 0) return path[0];
+  let target = t * total;
+  for (let i = 0; i < segs.length; i++) {
+    if (target <= segs[i]) return lerp(path[i], path[i + 1], segs[i] ? target / segs[i] : 0);
+    target -= segs[i];
+  }
+  return path[path.length - 1];
+}
 
 function animateStep() {
   vehicles.forEach((v) => {
     v.t += v.speed;
     if (v.t >= 1) v.t = 0;               // boucle : repart du depart
-    v.marker.setLatLng(lerp(v.path[0], v.path[1], v.t));
+    v.marker.setLatLng(pointOnPath(v.path, v.t));
   });
   animId = requestAnimationFrame(animateStep);
 }
@@ -335,44 +370,55 @@ function renderMap() {
   const only = el("mapTrajet") ? el("mapTrajet").value : "";
   const recs = only ? RECORDS.filter((r) => r.trajet === only) : RECORDS;
 
-  // Regroupe par (depart -> destination)
+  // Regroupe par (depart -> regroupement) et par vehicule (bus / mini bus)
   const pairs = {};
   recs.forEach((r) => {
-    const key = `${norm(r.lieuDepart)}||${norm(r.trajet)}`;
+    const key = `${norm(r.lieuDepart)}||${norm(r.trajet)}||${norm(r.typeTransport)}`;
     if (!pairs[key]) {
       pairs[key] = {
-        dep: GEO[norm(r.lieuDepart)], dest: GEO[norm(r.trajet)],
-        depName: r.lieuDepart, destName: r.trajet,
+        dep: GEO[norm(r.lieuDepart)], via: GEO[norm(r.trajet)],
+        depName: r.lieuDepart, viaName: r.trajet,
         type: r.typeTransport, count: 0,
       };
     }
     pairs[key].count++;
   });
 
-  const bounds = [];
+  const bounds = [MINE.coord];
   const seen = new Set();
   Object.values(pairs).forEach((p) => {
-    if (p.dep && p.dest) {
-      L.polyline([p.dep, p.dest], {
+    if (p.dep) {
+      // Trajet : 1er depart -> (point de regroupement) -> mine de Draa Lasfar
+      const path = [p.dep];
+      if (p.via && (p.via[0] !== p.dep[0] || p.via[1] !== p.dep[1])) path.push(p.via);
+      path.push(MINE.coord);
+      L.polyline(path, {
         color: norm(p.type).includes("MINI") ? "#22c55e" : "#3b82f6",
         weight: 3, opacity: .55, dashArray: "6 6",
       }).addTo(layer);
-      // vehicule anime sur ce trajet
+      // vehicule anime, du depart jusqu'a la mine
       const m = L.marker(p.dep, { icon: vehicleIcon(p.type) })
-        .bindTooltip(`${p.depName} → ${p.destName} (${p.count})`).addTo(layer);
-      vehicles.push({ marker: m, path: [p.dep, p.dest], t: Math.random(), speed: 0.0016 + Math.random() * 0.0012 });
-      bounds.push(p.dep, p.dest);
+        .bindTooltip(`${p.depName} → ${p.viaName} → ${MINE.name} (${p.count})`).addTo(layer);
+      vehicles.push({ marker: m, path, t: Math.random(), speed: 0.0016 + Math.random() * 0.0012 });
+      bounds.push(...path);
     }
-    [["dep", "#3b82f6"], ["dest", "#ef4444"]].forEach(([k, col]) => {
-      const c = p[k]; const nm = k === "dep" ? p.depName : p.destName;
-      if (c && !seen.has(nm)) {
-        seen.add(nm);
-        L.circleMarker(c, { radius: k === "dest" ? 9 : 7, color: "#fff", weight: 2, fillColor: col, fillOpacity: 1 })
-          .bindPopup(`<b>${nm}</b>`).addTo(layer);
-        bounds.push(c);
-      }
-    });
+    if (p.dep && !seen.has(p.depName)) {
+      seen.add(p.depName);
+      L.circleMarker(p.dep, { radius: 7, color: "#fff", weight: 2, fillColor: "#3b82f6", fillOpacity: 1 })
+        .bindPopup(`<b>${p.depName}</b><br><small>Départ</small>`).addTo(layer);
+      bounds.push(p.dep);
+    }
+    if (p.via && !seen.has(p.viaName)) {
+      seen.add(p.viaName);
+      L.circleMarker(p.via, { radius: 6, color: "#fff", weight: 2, fillColor: "#ef4444", fillOpacity: 1 })
+        .bindPopup(`<b>${p.viaName}</b><br><small>Regroupement</small>`).addTo(layer);
+      bounds.push(p.via);
+    }
   });
+
+  // Point d'arrivee commun : la mine de Draa Lasfar
+  L.marker(MINE.coord, { icon: mineIcon() })
+    .bindPopup(`<b>${MINE.name}</b><br><small>Arrivée</small>`).addTo(layer);
 
   if (bounds.length) map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
   setTimeout(() => map.invalidateSize(), 100);
