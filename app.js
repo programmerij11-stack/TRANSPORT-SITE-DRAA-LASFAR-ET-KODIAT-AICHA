@@ -6,6 +6,32 @@
 
 let RECORDS = [];
 let formModal = null;
+let confirmModal = null;
+
+/* Confirmation via modale interne (immunisee contre la suppression
+   des boites de dialogue natives du navigateur, qui ferait echouer
+   silencieusement confirm()). Retourne une Promise<boolean>. */
+function askConfirm(message, okLabel) {
+  return new Promise((resolve) => {
+    const modalEl = el("confirmModal");
+    el("confirmMessage").textContent = message;
+    const okBtn = el("confirmOkBtn");
+    okBtn.innerHTML = `<i class="bi bi-check-lg"></i> ${okLabel || "Confirmer"}`;
+    let settled = false;
+    const done = (val) => {
+      if (settled) return;
+      settled = true;
+      okBtn.removeEventListener("click", onOk);
+      modalEl.removeEventListener("hidden.bs.modal", onHide);
+      resolve(val);
+    };
+    const onOk = () => { done(true); confirmModal.hide(); };
+    const onHide = () => done(false);
+    okBtn.addEventListener("click", onOk);
+    modalEl.addEventListener("hidden.bs.modal", onHide);
+    confirmModal.show();
+  });
+}
 
 /* --- Dictionnaire des coordonnees (approximatives, Marrakech) --- */
 const GEO = {
@@ -467,7 +493,7 @@ async function saveForm() {
 }
 async function delRec(id) {
   const r = RECORDS.find((x) => x.id === id);
-  if (!confirm(`Supprimer ${r ? r.nom + " " + r.prenom : "cet agent"} ?`)) return;
+  if (!(await askConfirm(`Supprimer ${r ? r.nom + " " + r.prenom : "cet agent"} ?`, "Supprimer"))) return;
   try {
     await db.collection(COLLECTION).doc(id).delete();
     RECORDS = RECORDS.filter((x) => x.id !== id);
@@ -487,8 +513,7 @@ async function loadSamples() {
 /* --- Vider toute la liste --- */
 async function clearAll() {
   if (!RECORDS.length) { alert("La liste est deja vide."); return; }
-  if (!confirm(`Supprimer DEFINITIVEMENT les ${RECORDS.length} agents ?\nCette action est irreversible.`)) return;
-  if (!confirm("Confirmer une derniere fois : tout supprimer ?")) return;
+  if (!(await askConfirm(`Supprimer DEFINITIVEMENT les ${RECORDS.length} agents ? Cette action est irreversible.`, "Tout supprimer"))) return;
   setStatus("Suppression en cours...");
   try {
     const ids = RECORDS.map((r) => r.id);
@@ -602,6 +627,7 @@ el("mapTrajet").addEventListener("change", renderMap);
 /* --- Init --- */
 window.addEventListener("DOMContentLoaded", () => {
   formModal = new bootstrap.Modal(el("formModal"));
+  confirmModal = new bootstrap.Modal(el("confirmModal"));
   listen();
   setTimeout(() => { if (el("loadingOverlay").style.display !== "none") el("loadingOverlay").style.display = "none"; }, 6000);
 });
