@@ -468,8 +468,12 @@ async function saveForm() {
 async function delRec(id) {
   const r = RECORDS.find((x) => x.id === id);
   if (!confirm(`Supprimer ${r ? r.nom + " " + r.prenom : "cet agent"} ?`)) return;
-  try { await db.collection(COLLECTION).doc(id).delete(); }
-  catch (e) { alert("Erreur: " + e.message); }
+  try {
+    await db.collection(COLLECTION).doc(id).delete();
+    RECORDS = RECORDS.filter((x) => x.id !== id);
+    renderAll();
+    setStatus("Agent supprime");
+  } catch (e) { alert("Erreur: " + e.message); }
 }
 
 /* --- Exemples --- */
@@ -493,6 +497,8 @@ async function clearAll() {
       ids.slice(i, i + 400).forEach((id) => batch.delete(db.collection(COLLECTION).doc(id)));
       await batch.commit();
     }
+    RECORDS = [];
+    renderAll();
     setStatus("Synchronise");
     alert("Liste videe.");
   } catch (e) { alert("Erreur: " + e.message); }
