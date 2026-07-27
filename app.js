@@ -164,6 +164,7 @@ function renderAll() {
   renderTable();
   renderDashboard();
   renderLignes();
+  renderCartes();
   if (el("carte").classList.contains("active")) renderMap();
 }
 
@@ -183,6 +184,7 @@ function buildFilterOptions() {
   fillSelect(el("fTrajet"), uniq("trajet"), "Trajet");
   fillSelect(el("fType"), uniq("typeTransport"), "Type transport");
   fillSelect(el("fPoste"), uniq("poste"), "Poste");
+  fillSelect(el("cartesDepart"), uniq("lieuDepart"), "Tous les departs");
   const put = (id, vals) => (el(id).innerHTML = vals.map((v) => `<option value="${v}">`).join(""));
   put("dl_depart", uniq("lieuDepart"));
   put("dl_service", uniq("service"));
@@ -312,6 +314,66 @@ function renderLignes() {
       </div>
     </div>`).join("") || `<p class="text-muted">Aucune ligne. Ajoutez des agents.</p>`;
 }
+
+/* --- Cartes de transport (format carte nationale) --- */
+const esc = (s) => (s ?? "").toString()
+  .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+function cardInitials(r) {
+  const i = ((r.nom || "").trim()[0] || "") + ((r.prenom || "").trim()[0] || "");
+  return i.toUpperCase() || "?";
+}
+function matricule(r) {
+  return (r.id || "").toString().replace(/[^a-z0-9]/gi, "").slice(-6).toUpperCase().padStart(6, "0");
+}
+function cartesFiltered() {
+  const q = norm(el("cartesQ").value);
+  const fd = el("cartesDepart").value;
+  return RECORDS.filter((r) => {
+    if (fd && r.lieuDepart !== fd) return false;
+    if (q && !(norm(r.nom) + " " + norm(r.prenom)).includes(q)) return false;
+    return true;
+  });
+}
+function renderCartes() {
+  const rows = cartesFiltered();
+  el("cartesCount").textContent = rows.length;
+  el("cartesGrid").innerHTML = rows.map((r) => `
+    <div class="col-cart" data-id="${esc(r.id)}">
+      <div class="tcard">
+        <div class="tcard-head">
+          <div class="tcard-title"><i class="bi bi-bus-front"></i> CARTE DE TRANSPORT</div>
+          <div class="tcard-soc">${esc(r.societe) || "—"}</div>
+        </div>
+        <div class="tcard-body">
+          <div class="tcard-photo">${esc(cardInitials(r))}</div>
+          <div class="tcard-fields">
+            <div><b>Nom</b> : ${esc(r.nom) || "—"}</div>
+            <div><b>Prénom</b> : ${esc(r.prenom) || "—"}</div>
+            <div><b>Départ</b> : ${esc(r.lieuDepart) || "—"}</div>
+            <div><b>Trajet</b> : ${esc(r.trajet) || "—"} → Mine Draa Lasfar</div>
+            <div><b>Transport</b> : ${esc(r.typeTransport) || "—"} · <b>Poste</b> ${esc(r.poste) || "—"}</div>
+          </div>
+        </div>
+        <div class="tcard-foot">
+          <span class="mat">N° ${matricule(r)}</span>
+          <span>Draa Lasfar &amp; Koudiat Aicha</span>
+        </div>
+      </div>
+      <button class="btn btn-sm btn-outline-light w-100 mt-2 no-print" onclick="printOne('${esc(r.id)}')">
+        <i class="bi bi-printer"></i> Imprimer
+      </button>
+    </div>`).join("") || `<p class="text-muted">Aucun agent. Ajoutez ou importez des agents.</p>`;
+}
+function printAllCartes() {
+  document.body.classList.remove("print-one");
+  window.print();
+}
+function printOne(id) {
+  document.querySelectorAll(".col-cart").forEach((c) => c.classList.toggle("print-target", c.dataset.id === id));
+  document.body.classList.add("print-one");
+  window.print();
+}
+window.addEventListener("afterprint", () => document.body.classList.remove("print-one"));
 
 /* --- Carte --- */
 let map = null, layer = null;
@@ -623,6 +685,8 @@ document.querySelectorAll(".nav-link").forEach((btn) => {
 ["q", "fDepart", "fTrajet", "fType", "fPoste"].forEach((id) =>
   el(id).addEventListener("input", renderTable));
 el("mapTrajet").addEventListener("change", renderMap);
+el("cartesQ").addEventListener("input", renderCartes);
+el("cartesDepart").addEventListener("change", renderCartes);
 
 /* --- Init --- */
 window.addEventListener("DOMContentLoaded", () => {
