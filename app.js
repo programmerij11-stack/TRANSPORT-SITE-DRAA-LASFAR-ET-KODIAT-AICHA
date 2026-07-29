@@ -656,17 +656,59 @@ el("importFile").addEventListener("change", async (e) => {
   finally { e.target.value = ""; }
 });
 
-/* --- Export Excel --- */
-function exportExcel() {
-  const data = filtered().map((r) => ({
+/* --- Export Excel (repli CSV si la librairie ne peut pas se charger) --- */
+const EXPORT_COLS = [
+  "NOM", "PRENOM", "LIEU DEPART", "SERVICE",
+  "TRAJET", "SOCIETE", "TYPE TRANSPORT", "QTE", "POSTE",
+];
+function exportRows() {
+  return filtered().map((r) => ({
     NOM: r.nom, PRENOM: r.prenom, "LIEU DEPART": r.lieuDepart, SERVICE: r.service,
     TRAJET: r.trajet, SOCIETE: r.societe, "TYPE TRANSPORT": r.typeTransport,
     QTE: r.qte, POSTE: r.poste,
   }));
-  const ws = XLSX.utils.json_to_sheet(data);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Personnel");
-  XLSX.writeFile(wb, "transport-personnel.xlsx");
+}
+function downloadBlob(content, filename, mime) {
+  const url = URL.createObjectURL(new Blob([content], { type: mime }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+function exportCSV(data) {
+  const escCsv = (v) => {
+    const s = (v ?? "").toString();
+    return /[",;\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const lines = [EXPORT_COLS.join(";")].concat(
+    data.map((r) => EXPORT_COLS.map((c) => escCsv(r[c])).join(";"))
+  );
+  // BOM UTF-8 pour qu'Excel affiche correctement les accents
+  downloadBlob("\uFEFF" + lines.join("\r\n"), "transport-personnel.csv", "text/csv;charset=utf-8");
+}
+function exportExcel() {
+  const data = exportRows();
+  if (!data.length) {
+    alert("Aucun agent a exporter. Ajoutez ou importez des agents d'abord.");
+    return;
+  }
+  if (typeof XLSX !== "undefined" && XLSX.utils) {
+    try {
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Personnel");
+      XLSX.writeFile(wb, "transport-personnel.xlsx");
+      return;
+    } catch (e) {
+      console.warn("Export XLSX echoue, repli CSV:", e);
+    }
+  }
+  // La librairie Excel n'a pas pu se charger (CDN bloque) : repli CSV lisible par Excel
+  exportCSV(data);
+  alert("La liste a ete exportee au format CSV (ouvrable dans Excel).\nLa librairie Excel (.xlsx) n'a pas pu etre chargee.");
 }
 
 /* --- Navigation --- */
