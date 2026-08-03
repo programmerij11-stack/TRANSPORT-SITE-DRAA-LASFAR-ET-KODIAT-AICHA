@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Connexion · Transport Draa Lasfar &amp; Koudiat Aicha</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js?v=20260728"></script>
+  <style>
+    :root{--accent:#22c55e}
+    body{margin:0;min-height:100vh;background:#050a07;color:#e7f2ec;font-family:'Segoe UI',system-ui,sans-serif;
+      display:flex;align-items:center;justify-content:center;padding:1.25rem;
+      background-image:radial-gradient(ellipse at 20% 30%,rgba(34,197,94,.08) 0%,transparent 60%),radial-gradient(ellipse at 80% 70%,rgba(34,197,94,.06) 0%,transparent 60%)}
+    .box{width:100%;max-width:420px}
+    .brand{display:flex;align-items:center;gap:.7rem;justify-content:center;margin-bottom:1.2rem}
+    .brand i{font-size:2rem;color:var(--accent)}
+    .brand span{font-weight:800;font-size:1.15rem;line-height:1.1}
+    .brand small{display:block;color:#7fae91;font-weight:400;font-size:.78rem}
+    .card-dark{background:#0c1611;border:1px solid rgba(34,197,94,.22);border-radius:1rem;padding:1.4rem}
+    label{font-size:.85rem;color:#7fae91}
+    .form-control{background:#08120c;border:1px solid rgba(34,197,94,.25);color:#e7f2ec}
+    .form-control:focus{background:#08120c;border-color:var(--accent);color:#e7f2ec;box-shadow:0 0 0 .15rem rgba(34,197,94,.2)}
+    .btn-primary{background:linear-gradient(135deg,#22c55e,#16a34a);border:none;color:#04140c;font-weight:700}
+    .msg{border-radius:.7rem;padding:.75rem .9rem;margin-top:1rem;font-size:.9rem;display:none}
+    .msg-err{background:rgba(239,68,68,.14);border:1px solid #ef4444;color:#fecaca;display:block}
+    .msg-ok{background:rgba(34,197,94,.14);border:1px solid var(--accent);color:#bbf7d0;display:block}
+    .link{color:var(--accent);cursor:pointer;font-size:.85rem;background:none;border:none;padding:0}
+    hr{border-color:rgba(34,197,94,.2)}
+  </style>
+</head>
+<body>
+<div class="box">
+  <div class="brand">
+    <i class="bi bi-bus-front"></i>
+    <span>Transport<small>Draa Lasfar &amp; Koudiat Aicha</small></span>
+  </div>
+  <div class="card-dark">
+    <h5 class="mb-3" style="color:var(--accent)"><i class="bi bi-lock-fill"></i> Connexion</h5>
+    <div class="mb-3">
+      <label class="mb-1">Adresse e-mail</label>
+      <input class="form-control" id="email" type="email" autocomplete="username" placeholder="ex. admin@transport.ma">
+    </div>
+    <div class="mb-3">
+      <label class="mb-1">Mot de passe</label>
+      <input class="form-control" id="password" type="password" autocomplete="current-password" placeholder="••••••••">
+    </div>
+    <button class="btn btn-primary w-100" id="loginBtn" onclick="doLogin()"><i class="bi bi-box-arrow-in-right"></i> Se connecter</button>
+    <div class="text-center mt-2">
+      <button class="link" onclick="doReset()">Mot de passe oublié ?</button>
+    </div>
+    <div class="msg" id="msg"></div>
+
+    <div id="bootstrap" style="display:none">
+      <hr class="my-3">
+      <div style="font-size:.85rem;color:#7fae91;margin-bottom:.6rem">
+        <i class="bi bi-stars"></i> Première utilisation : créez le <b>compte administrateur</b> (rôle Éditeur).
+        Cette option disparaît dès qu'un compte existe.
+      </div>
+      <button class="btn btn-outline-light w-100" id="bootBtn" onclick="doBootstrap()">
+        <i class="bi bi-person-plus"></i> Créer le premier administrateur</button>
+    </div>
+  </div>
+  <p class="text-center mt-3" style="font-size:.78rem;color:#5c7d68">Accès réservé au personnel autorisé.</p>
+</div>
+
+<script>
+  function setMsg(cls, html){ const m=document.getElementById("msg"); m.className="msg "+cls; m.innerHTML=html; }
+  function frErr(e){
+    const c=e && e.code || "";
+    if(c.includes("invalid-credential")||c.includes("wrong-password")||c.includes("user-not-found")) return "E-mail ou mot de passe incorrect.";
+    if(c.includes("invalid-email")) return "Adresse e-mail invalide.";
+    if(c.includes("too-many-requests")) return "Trop de tentatives. Réessayez plus tard.";
+    if(c.includes("weak-password")) return "Mot de passe trop faible (6 caractères minimum).";
+    if(c.includes("email-already-in-use")) return "Cet e-mail est déjà utilisé.";
+    if(c.includes("operation-not-allowed")) return "La connexion Email/Mot de passe n'est pas activée dans Firebase.";
+    if(c.includes("configuration-not-found")) return "Authentification non configurée : activez Email/Mot de passe dans la console Firebase.";
+    return (e && e.message) || "Erreur inconnue.";
+  }
+
+  // Deja connecte -> aller a l'app (sauf si on vient d'etre refuse)
+  const params = new URLSearchParams(location.search);
+  if(params.get("err") === "unauthorized"){
+    setMsg("msg-err", '<i class="bi bi-shield-exclamation"></i> Ce compte n\'a pas accès à l\'application. Contactez l\'administrateur.');
+  } else if(params.get("out") === "1"){
+    setMsg("msg-ok", '<i class="bi bi-check-circle"></i> Vous êtes déconnecté.');
+  } else if(auth){
+    auth.onAuthStateChanged((u)=>{ if(u) location.href = "index.html"; });
+  }
+
+  // Affiche l'option "premier admin" si aucune configuration n'existe encore
+  if(auth){
+    db.collection("transport_config").doc("app").get()
+      .then((d)=>{ if(!d.exists) document.getElementById("bootstrap").style.display="block"; })
+      .catch(()=>{ /* lecture bloquee -> on n'affiche pas le bootstrap */ });
+  }
+
+  async function doLogin(){
+    if(!auth){ setMsg("msg-err","Authentification indisponible."); return; }
+    const email=document.getElementById("email").value.trim();
+    const pwd=document.getElementById("password").value;
+    if(!email||!pwd){ setMsg("msg-err","Renseignez l'e-mail et le mot de passe."); return; }
+    const btn=document.getElementById("loginBtn"); btn.disabled=true;
+    try{
+      await auth.signInWithEmailAndPassword(email,pwd);
+      location.href="index.html";
+    }catch(e){ setMsg("msg-err",'<i class="bi bi-x-circle"></i> '+frErr(e)); btn.disabled=false; }
+  }
+
+  async function doReset(){
+    if(!auth){ setMsg("msg-err","Authentification indisponible."); return; }
+    const email=document.getElementById("email").value.trim();
+    if(!email){ setMsg("msg-err","Saisissez d'abord votre e-mail pour recevoir le lien."); return; }
+    try{ await auth.sendPasswordResetEmail(email); setMsg("msg-ok",'<i class="bi bi-envelope"></i> Un e-mail de réinitialisation a été envoyé à '+email+'.'); }
+    catch(e){ setMsg("msg-err",'<i class="bi bi-x-circle"></i> '+frErr(e)); }
+  }
+
+  async function doBootstrap(){
+    if(!auth){ setMsg("msg-err","Authentification indisponible."); return; }
+    const email=document.getElementById("email").value.trim();
+    const pwd=document.getElementById("password").value;
+    if(!email||pwd.length<6){ setMsg("msg-err","Saisissez l'e-mail et un mot de passe d'au moins 6 caractères ci-dessus."); return; }
+    const btn=document.getElementById("bootBtn"); btn.disabled=true;
+    try{
+      const cred=await auth.createUserWithEmailAndPassword(email,pwd);
+      const uid=cred.user.uid;
+      const batch=db.batch();
+      batch.set(db.collection(USERS_COLLECTION).doc(uid), { email, role:"editeur", createdAt:Date.now() });
+      batch.set(db.collection("transport_config").doc("app"), { bootstrapped:true, at:Date.now(), by:email });
+      await batch.commit();
+      location.href="index.html";
+    }catch(e){ setMsg("msg-err",'<i class="bi bi-x-circle"></i> '+frErr(e)); btn.disabled=false; }
+  }
+
+  document.getElementById("password").addEventListener("keydown",(e)=>{ if(e.key==="Enter") doLogin(); });
+</script>
+</body>
+</html>

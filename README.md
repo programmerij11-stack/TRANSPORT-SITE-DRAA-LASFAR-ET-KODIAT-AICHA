@@ -47,6 +47,33 @@ véhicule). Un véhicule est considéré **actif** si sa dernière position date
 > de GitHub Pages et de `localhost`. La page Chauffeur doit rester **ouverte** pendant le
 > trajet pour continuer à émettre la position.
 
+## Connexion & comptes (Firebase Authentication)
+
+L'application est protégée par une **page de connexion** (`login.html`). Deux rôles :
+
+- **Éditeur** : peut consulter **et** saisir (ajouter / modifier / supprimer / importer / vider).
+- **Consultation** : lecture seule (les boutons de saisie sont masqués).
+
+La rubrique **Utilisateurs** (visible uniquement pour les éditeurs) permet d'**ajouter**
+un compte (e-mail + mot de passe + rôle) et de **retirer** l'accès d'un compte.
+
+### Mise en service (2 étapes dans la console Firebase)
+
+1. **Activer la connexion Email/Mot de passe** (obligatoire) :
+   Console Firebase → **Authentication** → **Sign-in method** → activez **E-mail/Mot de passe**.
+2. **Coller les règles de sécurité** (recommandé) : voir `firestore.rules`.
+   Console → **Firestore Database** → **Rules**.
+   > ⚠️ Ce projet Firebase est **partagé avec SAMIR**. Les règles fournies ne couvrent que
+   > les collections `transport_*`. **Ajoutez** ces blocs à vos règles existantes, ne les
+   > remplacez pas entièrement, pour ne pas bloquer SAMIR.
+
+Au **premier lancement**, la page de connexion propose « Créer le premier administrateur »
+(rôle Éditeur). Cette option disparaît dès qu'un compte existe. Les comptes créés ensuite
+le sont depuis la rubrique **Utilisateurs**.
+
+> Le retrait d'un utilisateur révoque son **accès** (suppression de son rôle). Son identifiant
+> Firebase Auth peut subsister ; sans rôle, il ne peut plus rien voir ni faire.
+
 ## Firebase
 
 Le fichier `firebase-config.js` réutilise le même projet Firebase que SAMIR, mais dans
