@@ -24,6 +24,7 @@ const auth = (typeof firebase.auth === "function") ? firebase.auth() : null;
 // Nom des collections Firestore (isolees de l'app SAMIR)
 const COLLECTION = "transport_personnel";
 const USERS_COLLECTION = "transport_users";
+const VEHICLES_COLLECTION = "transport_vehicles";
 
 // Active la persistance hors-ligne (cache local automatique)
 db.enablePersistence({ synchronizeTabs: true }).catch(function (err) {

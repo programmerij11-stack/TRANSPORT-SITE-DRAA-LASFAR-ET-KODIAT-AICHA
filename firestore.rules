@@ -54,6 +54,12 @@ service cloud.firestore {
       allow write: if isEditor();
     }
 
+    // Bus & chauffeurs (flotte) : lecture par utilisateur autorise, ecriture par editeurs.
+    match /transport_vehicles/{doc} {
+      allow read: if isAuthorized();
+      allow write: if isEditor();
+    }
+
     // Positions GPS : ecrites par les chauffeurs (page chauffeur.html, sans
     // compte) -> ecriture ouverte ; lecture reservee aux utilisateurs autorises.
     // Pour durcir : donnez un compte aux chauffeurs et remplacez par isAuthorized().

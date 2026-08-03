@@ -47,6 +47,14 @@ véhicule). Un véhicule est considéré **actif** si sa dernière position date
 > de GitHub Pages et de `localhost`. La page Chauffeur doit rester **ouverte** pendant le
 > trajet pour continuer à émettre la position.
 
+## Bus & Chauffeurs (flotte)
+
+La rubrique **Bus & Chauffeurs** (menu de gauche) permet de saisir/modifier/supprimer les
+véhicules : **Type** (Bus / Mini bus), **N° du bus**, **Matricule**, **Ligne/Trajet**,
+**Nom du chauffeur**, **Téléphone du chauffeur** et **Capacité (places)**. Recherche + export
+Excel inclus. Les données sont stockées dans la collection Firestore `transport_vehicles`.
+La saisie est réservée au rôle **Éditeur** ; le rôle Consultation voit la liste en lecture seule.
+
 ## Connexion & comptes (Firebase Authentication)
 
 L'application est protégée par une **page de connexion** (`login.html`). Deux rôles :

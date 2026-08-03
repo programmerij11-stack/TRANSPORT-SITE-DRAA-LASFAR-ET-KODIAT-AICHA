@@ -113,6 +113,7 @@
     <button class="nav-link active" data-section="dashboard"><i class="bi bi-speedometer2"></i> Tableau de bord</button>
     <button class="nav-link" data-section="personnel"><i class="bi bi-people-fill"></i> Personnel</button>
     <button class="nav-link" data-section="lignes"><i class="bi bi-signpost-split"></i> Departs &amp; Lignes</button>
+    <button class="nav-link" data-section="bus"><i class="bi bi-bus-front"></i> Bus &amp; Chauffeurs</button>
     <button class="nav-link" data-section="carte"><i class="bi bi-map"></i> Carte</button>
     <button class="nav-link" data-section="cartes"><i class="bi bi-person-vcard"></i> Cartes de transport</button>
     <button class="nav-link" data-section="suivi"><i class="bi bi-geo-alt-fill"></i> Suivi GPS</button>
@@ -274,6 +275,29 @@
     </p>
   </section>
 
+  <!-- BUS & CHAUFFEURS -->
+  <section class="section" id="bus">
+    <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+      <div class="input-group" style="max-width:320px">
+        <span class="input-group-text"><i class="bi bi-search"></i></span>
+        <input class="form-control" id="busQ" placeholder="Rechercher (matricule, chauffeur, ligne)">
+      </div>
+      <button class="btn btn-primary ms-auto edit-only" onclick="openVehicleForm()"><i class="bi bi-plus-lg"></i> Ajouter un bus</button>
+      <button class="btn btn-outline-light" onclick="exportVehicles()"><i class="bi bi-download"></i> Exporter Excel</button>
+    </div>
+    <div class="card-dark p-2">
+      <div class="table-wrap">
+        <table class="table table-dark table-hover align-middle mb-0">
+          <thead><tr>
+            <th>Type</th><th>N° bus</th><th>Matricule</th><th>Ligne / Trajet</th>
+            <th>Chauffeur</th><th>Téléphone</th><th>Places</th><th></th>
+          </tr></thead>
+          <tbody id="busBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
   <!-- UTILISATEURS -->
   <section class="section" id="utilisateurs">
     <div class="card-dark p-3 mb-3">
@@ -339,6 +363,36 @@
   </div>
 </div>
 
+<!-- MODAL BUS -->
+<div class="modal fade" id="busModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="busFormTitle">Ajouter un bus</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="v_id">
+        <div class="row g-3">
+          <div class="col-md-4"><label class="form-label">Type</label>
+            <select class="form-select" id="v_type"><option>BUS</option><option>MINI BUS</option></select>
+          </div>
+          <div class="col-md-4"><label class="form-label">N° du bus</label><input class="form-control" id="v_numero" placeholder="ex. B-01"></div>
+          <div class="col-md-4"><label class="form-label">Matricule (plaque)</label><input class="form-control" id="v_matricule" placeholder="ex. 12345-A-6"></div>
+          <div class="col-md-6"><label class="form-label">Ligne / Trajet</label><input class="form-control" id="v_trajet" list="dl_trajet" placeholder="ex. MHAMID 10 → Draa Lasfar"></div>
+          <div class="col-md-6"><label class="form-label">Nom du chauffeur</label><input class="form-control" id="v_chauffeur"></div>
+          <div class="col-md-6"><label class="form-label">Téléphone du chauffeur</label><input class="form-control" id="v_telephone" type="tel" placeholder="ex. 06 12 34 56 78"></div>
+          <div class="col-md-6"><label class="form-label">Capacité (places)</label><input class="form-control" id="v_capacite" type="number" min="0" placeholder="ex. 30"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-light" data-bs-dismiss="modal">Annuler</button>
+        <button class="btn btn-primary" onclick="saveVehicle()"><i class="bi bi-check-lg"></i> Enregistrer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL CONFIRMATION -->
 <div class="modal fade" id="confirmModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
@@ -359,6 +413,6 @@
 <div id="fbStatus"><i class="bi bi-cloud-check"></i> Synchronise</div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-<script src="app.js?v=20260729"></script>
+<script src="app.js?v=20260730"></script>
 </body>
 </html>

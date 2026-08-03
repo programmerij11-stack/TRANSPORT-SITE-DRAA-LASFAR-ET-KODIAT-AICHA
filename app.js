@@ -851,6 +851,7 @@ function startAppData() {
   if (appStarted) return;
   appStarted = true;
   listen();
+  listenVehicles();
   if (isEditor()) listenUsers();
 }
 
@@ -943,10 +944,119 @@ async function delUser(uid, email) {
   } catch (e) { alert("Erreur : " + e.message); }
 }
 
+/* ===== Bus & chauffeurs (flotte) ===== */
+let VEHICLES = [], vehiclesUnsub = null, busModal = null;
+
+function listenVehicles() {
+  if (vehiclesUnsub) return;
+  vehiclesUnsub = db.collection(VEHICLES_COLLECTION).onSnapshot(
+    (snap) => { VEHICLES = snap.docs.map((d) => ({ id: d.id, ...d.data() })); renderVehicles(); },
+    (e) => console.error("vehicles:", e),
+  );
+}
+function vehiclesFiltered() {
+  const q = norm(el("busQ") ? el("busQ").value : "");
+  if (!q) return VEHICLES;
+  return VEHICLES.filter((v) =>
+    [v.numero, v.matricule, v.trajet, v.chauffeur, v.telephone, v.type]
+      .map((x) => norm(x)).join(" ").includes(q));
+}
+function renderVehicles() {
+  const body = el("busBody"); if (!body) return;
+  const rows = vehiclesFiltered().slice().sort((a, b) =>
+    norm(a.numero + a.matricule).localeCompare(norm(b.numero + b.matricule)));
+  if (!rows.length) {
+    body.innerHTML = `<tr><td colspan="8" class="text-center py-4" style="color:#7fae91">
+      Aucun bus enregistré. <button class="btn btn-sm btn-primary ms-2 edit-only" onclick="openVehicleForm()">Ajouter un bus</button></td></tr>`;
+    return;
+  }
+  body.innerHTML = rows.map((v) => `
+    <tr>
+      <td><span class="badge-t ${typeClass(v.type)}">${v.type || ""}</span></td>
+      <td class="fw-semibold">${v.numero || ""}</td>
+      <td>${v.matricule || ""}</td>
+      <td>${v.trajet || ""}</td>
+      <td>${v.chauffeur || ""}</td>
+      <td>${v.telephone ? `<a href="tel:${(v.telephone + "").replace(/\s+/g, "")}" style="color:var(--accent)">${v.telephone}</a>` : ""}</td>
+      <td>${v.capacite ?? ""}</td>
+      <td class="text-end text-nowrap edit-only">
+        <button class="btn btn-sm btn-outline-light" onclick="editVehicle('${v.id}')"><i class="bi bi-pencil"></i></button>
+        <button class="btn btn-sm btn-outline-danger" onclick="delVehicle('${v.id}')"><i class="bi bi-trash"></i></button>
+      </td>
+    </tr>`).join("");
+}
+function openVehicleForm() {
+  if (!requireEditor()) return;
+  el("busFormTitle").textContent = "Ajouter un bus";
+  ["v_id", "v_numero", "v_matricule", "v_trajet", "v_chauffeur", "v_telephone", "v_capacite"].forEach((id) => (el(id).value = ""));
+  el("v_type").value = "BUS";
+  busModal.show();
+}
+function editVehicle(id) {
+  if (!requireEditor()) return;
+  const v = VEHICLES.find((x) => x.id === id); if (!v) return;
+  el("busFormTitle").textContent = "Modifier un bus";
+  el("v_id").value = v.id;
+  el("v_type").value = v.type || "BUS";
+  el("v_numero").value = v.numero || "";
+  el("v_matricule").value = v.matricule || "";
+  el("v_trajet").value = v.trajet || "";
+  el("v_chauffeur").value = v.chauffeur || "";
+  el("v_telephone").value = v.telephone || "";
+  el("v_capacite").value = v.capacite ?? "";
+  busModal.show();
+}
+async function saveVehicle() {
+  if (!requireEditor()) return;
+  const data = {
+    type: el("v_type").value,
+    numero: el("v_numero").value.trim(),
+    matricule: el("v_matricule").value.trim(),
+    trajet: el("v_trajet").value.trim(),
+    chauffeur: el("v_chauffeur").value.trim(),
+    telephone: el("v_telephone").value.trim(),
+    capacite: el("v_capacite").value === "" ? null : (Number(el("v_capacite").value) || 0),
+    updatedAt: Date.now(),
+  };
+  if (!data.matricule && !data.numero && !data.chauffeur) {
+    alert("Renseignez au moins le matricule, le n° du bus ou le chauffeur.");
+    return;
+  }
+  const id = el("v_id").value;
+  try {
+    if (id) await db.collection(VEHICLES_COLLECTION).doc(id).update(data);
+    else await db.collection(VEHICLES_COLLECTION).add({ ...data, createdAt: Date.now() });
+    busModal.hide();
+    setStatus("Bus enregistré");
+  } catch (e) { alert("Erreur: " + e.message); }
+}
+async function delVehicle(id) {
+  if (!requireEditor()) return;
+  const v = VEHICLES.find((x) => x.id === id);
+  const label = v ? (v.numero || v.matricule || v.chauffeur || "ce bus") : "ce bus";
+  if (!(await askConfirm(`Supprimer ${label} ?`, "Supprimer"))) return;
+  try { await db.collection(VEHICLES_COLLECTION).doc(id).delete(); setStatus("Bus supprimé"); }
+  catch (e) { alert("Erreur: " + e.message); }
+}
+function exportVehicles() {
+  if (!VEHICLES.length) { alert("Aucun bus à exporter."); return; }
+  const data = VEHICLES.map((v) => ({
+    TYPE: v.type || "", "N° BUS": v.numero || "", MATRICULE: v.matricule || "",
+    "LIGNE/TRAJET": v.trajet || "", CHAUFFEUR: v.chauffeur || "",
+    TELEPHONE: v.telephone || "", PLACES: v.capacite ?? "",
+  }));
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Bus");
+  XLSX.writeFile(wb, "bus_chauffeurs.xlsx");
+}
+
 /* --- Init --- */
 window.addEventListener("DOMContentLoaded", () => {
   formModal = new bootstrap.Modal(el("formModal"));
   confirmModal = new bootstrap.Modal(el("confirmModal"));
+  busModal = new bootstrap.Modal(el("busModal"));
+  if (el("busQ")) el("busQ").addEventListener("input", renderVehicles);
   guardAuth();
   setTimeout(() => { if (el("loadingOverlay").style.display !== "none") el("loadingOverlay").style.display = "none"; }, 8000);
 });
