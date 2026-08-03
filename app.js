@@ -711,6 +711,94 @@ function exportExcel() {
   alert("La liste a ete exportee au format CSV (ouvrable dans Excel).\nLa librairie Excel (.xlsx) n'a pas pu etre chargee.");
 }
 
+/* ===== Suivi GPS (temps reel) ===== */
+const POSITIONS = "transport_positions";
+const GPS_ACTIVE_MS = 2 * 60 * 1000;
+let gpsMap = null, gpsMarkers = {}, gpsUnsub = null, gpsData = [], gpsTick = null, gpsFitDone = false;
+
+function gpsIcon(type, active) {
+  const emoji = norm(type).includes("MINI") ? "🚐" : "🚌";
+  return L.divIcon({
+    className: "veh-icon",
+    html: `<div style="font-size:24px;line-height:24px;filter:drop-shadow(0 0 3px #000);opacity:${active ? 1 : .5}">${emoji}</div>`,
+    iconSize: [26, 26], iconAnchor: [13, 13],
+  });
+}
+function timeAgo(ts) {
+  if (!ts) return "—";
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 60) return s + " s";
+  const m = Math.floor(s / 60);
+  if (m < 60) return m + " min";
+  return Math.floor(m / 60) + " h";
+}
+function renderGps() {
+  if (!gpsMap) {
+    gpsMap = L.map("gpsMap").setView([31.63, -8.03], 12);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "&copy; OpenStreetMap",
+    }).addTo(gpsMap);
+  }
+  setTimeout(() => gpsMap.invalidateSize(), 100);
+  if (!gpsUnsub) listenGps();
+  drawGps();
+}
+function listenGps() {
+  gpsUnsub = db.collection(POSITIONS).onSnapshot(
+    (snap) => { gpsData = snap.docs.map((d) => ({ id: d.id, ...d.data() })); drawGps(); },
+    (e) => console.error("GPS:", e),
+  );
+  if (!gpsTick) gpsTick = setInterval(drawGps, 15000); // rafraichit "actif" et "il y a X"
+}
+function drawGps() {
+  const now = Date.now();
+  let active = 0;
+  const seen = new Set();
+  const bounds = [];
+  gpsData.forEach((p) => {
+    if (typeof p.lat !== "number" || typeof p.lng !== "number") return;
+    seen.add(p.id);
+    const isActive = p.updatedAt && (now - p.updatedAt) < GPS_ACTIVE_MS;
+    if (isActive) active++;
+    bounds.push([p.lat, p.lng]);
+    if (gpsMap) {
+      if (gpsMarkers[p.id]) gpsMarkers[p.id].setLatLng([p.lat, p.lng]).setIcon(gpsIcon(p.type, isActive));
+      else gpsMarkers[p.id] = L.marker([p.lat, p.lng], { icon: gpsIcon(p.type, isActive) }).addTo(gpsMap);
+      gpsMarkers[p.id].bindTooltip(`${p.label || p.id} — ${timeAgo(p.updatedAt)}`);
+    }
+  });
+  if (gpsMap) {
+    Object.keys(gpsMarkers).forEach((id) => {
+      if (!seen.has(id)) { gpsMap.removeLayer(gpsMarkers[id]); delete gpsMarkers[id]; }
+    });
+  }
+  if (el("gpsActiveCount")) el("gpsActiveCount").textContent = active;
+  const list = el("gpsList");
+  if (list) {
+    if (!gpsData.length) {
+      list.innerHTML = `<p class="text-muted px-2" style="font-size:.85rem">Aucun véhicule ne partage sa position pour l'instant.</p>`;
+    } else {
+      list.innerHTML = gpsData.slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).map((p) => {
+        const isActive = p.updatedAt && (now - p.updatedAt) < GPS_ACTIVE_MS;
+        const emoji = norm(p.type).includes("MINI") ? "🚐" : "🚌";
+        return `<div class="gps-item"><span class="gps-dot ${isActive ? "gps-on" : "gps-off"}"></span>
+          <span style="font-size:1.1rem">${emoji}</span>
+          <span style="flex:1"><b>${p.label || p.id}</b><br>
+            <small style="color:#7fae91">${isActive ? "En ligne" : "Hors ligne"} · maj il y a ${timeAgo(p.updatedAt)}</small></span>
+          <button class="btn btn-sm btn-outline-light" onclick="focusGps('${p.id}')"><i class="bi bi-crosshair"></i></button></div>`;
+      }).join("");
+    }
+  }
+  if (gpsMap && bounds.length && !gpsFitDone) { gpsMap.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 }); gpsFitDone = true; }
+}
+function focusGps(id) {
+  const p = gpsData.find((x) => x.id === id);
+  if (p && gpsMap && typeof p.lat === "number") {
+    gpsMap.setView([p.lat, p.lng], 15);
+    if (gpsMarkers[id]) gpsMarkers[id].openTooltip();
+  }
+}
+
 /* --- Navigation --- */
 document.querySelectorAll(".nav-link").forEach((btn) => {
   btn.addEventListener("click", () => {
@@ -722,6 +810,7 @@ document.querySelectorAll(".nav-link").forEach((btn) => {
     el("pageTitle").textContent = btn.textContent.trim();
     document.getElementById("sidebar").classList.remove("show");
     if (id === "carte") renderMap();
+    if (id === "suivi") renderGps();
   });
 });
 ["q", "fDepart", "fTrajet", "fType", "fPoste"].forEach((id) =>
