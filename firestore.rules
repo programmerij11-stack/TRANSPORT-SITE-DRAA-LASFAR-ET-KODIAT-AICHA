@@ -1,0 +1,71 @@
+rules_version = '2';
+
+// ============================================================
+//  REGLES DE SECURITE FIRESTORE - APP TRANSPORT
+//  Draa Lasfar & Koudiat Aicha
+//
+//  ⚠️ IMPORTANT : ce projet Firebase est PARTAGE avec l'application
+//  SAMIR. Ces regles ne couvrent QUE les collections "transport_*".
+//  Si votre projet contient deja des regles pour SAMIR, AJOUTEZ les
+//  blocs "match /transport_*" ci-dessous a vos regles existantes,
+//  NE remplacez PAS tout par ce fichier (sinon SAMIR serait bloque).
+//  Si un bloc "match /{document=**} { allow read, write: if true; }"
+//  existe, il rend tout public et annule la securite : a retirer/limiter.
+// ============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+
+    function isAuthorized() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/transport_users/$(request.auth.uid));
+    }
+
+    function isEditor() {
+      return isAuthorized()
+        && get(/databases/$(database)/documents/transport_users/$(request.auth.uid)).data.role == 'editeur';
+    }
+
+    // Configuration de l'app : lecture publique (pour detecter la 1ere
+    // installation), creation unique au bootstrap, puis verrouillee.
+    match /transport_config/{doc} {
+      allow read: if true;
+      allow create: if signedIn()
+        && !exists(/databases/$(database)/documents/transport_config/$(doc));
+      allow update, delete: if isEditor();
+    }
+
+    // Comptes utilisateurs + roles.
+    match /transport_users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isEditor());
+      // Bootstrap : se creer soi-meme en 'editeur' tant qu'aucune config n'existe.
+      allow create: if signedIn() && request.auth.uid == uid
+        && request.resource.data.role == 'editeur'
+        && !exists(/databases/$(database)/documents/transport_config/app);
+      // Ensuite, seuls les editeurs gerent les comptes.
+      allow create, update, delete: if isEditor();
+    }
+
+    // Personnel : lecture par tout utilisateur autorise, ecriture par editeurs.
+    match /transport_personnel/{doc} {
+      allow read: if isAuthorized();
+      allow write: if isEditor();
+    }
+
+    // Bus & chauffeurs (flotte) : lecture par utilisateur autorise, ecriture par editeurs.
+    match /transport_vehicles/{doc} {
+      allow read: if isAuthorized();
+      allow write: if isEditor();
+    }
+
+    // Positions GPS : ecrites par les chauffeurs (page chauffeur.html, sans
+    // compte) -> ecriture ouverte ; lecture reservee aux utilisateurs autorises.
+    // Pour durcir : donnez un compte aux chauffeurs et remplacez par isAuthorized().
+    match /transport_positions/{doc} {
+      allow read: if isAuthorized();
+      allow write: if true;
+    }
+  }
+}

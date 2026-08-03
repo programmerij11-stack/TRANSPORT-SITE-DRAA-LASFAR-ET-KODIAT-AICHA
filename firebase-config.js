@@ -18,9 +18,13 @@ const firebaseConfig = {
 // Initialisation Firebase
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
+// auth peut etre indisponible si le SDK firebase-auth n'est pas charge
+const auth = (typeof firebase.auth === "function") ? firebase.auth() : null;
 
-// Nom de la collection Firestore (isolee de l'app SAMIR)
+// Nom des collections Firestore (isolees de l'app SAMIR)
 const COLLECTION = "transport_personnel";
+const USERS_COLLECTION = "transport_users";
+const VEHICLES_COLLECTION = "transport_vehicles";
 
 // Active la persistance hors-ligne (cache local automatique)
 db.enablePersistence({ synchronizeTabs: true }).catch(function (err) {

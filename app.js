@@ -214,8 +214,8 @@ function renderTable() {
   const rows = filtered();
   if (!rows.length) {
     el("tbody").innerHTML = `<tr><td colspan="10" class="text-center py-4" style="color:#7fae91">
-      Aucun agent. <button class="btn btn-sm btn-primary ms-2" onclick="openForm()">Ajouter</button>
-      ${RECORDS.length ? "" : `<button class="btn btn-sm btn-outline-light ms-2" onclick="loadSamples()">Charger des exemples</button>`}
+      Aucun agent. <button class="btn btn-sm btn-primary ms-2 edit-only" onclick="openForm()">Ajouter</button>
+      ${RECORDS.length ? "" : `<button class="btn btn-sm btn-outline-light ms-2 edit-only" onclick="loadSamples()">Charger des exemples</button>`}
       </td></tr>`;
     return;
   }
@@ -230,7 +230,7 @@ function renderTable() {
       <td><span class="badge-t ${typeClass(r.typeTransport)}">${r.typeTransport || ""}</span></td>
       <td>${r.qte ?? ""}</td>
       <td>${r.poste ?? ""}</td>
-      <td class="text-end text-nowrap">
+      <td class="text-end text-nowrap edit-only">
         <button class="btn btn-sm btn-outline-light" onclick="editRec('${r.id}')"><i class="bi bi-pencil"></i></button>
         <button class="btn btn-sm btn-outline-danger" onclick="delRec('${r.id}')"><i class="bi bi-trash"></i></button>
       </td>
@@ -515,6 +515,7 @@ function renderMap() {
 
 /* --- CRUD --- */
 function openForm() {
+  if (!requireEditor()) return;
   el("formTitle").textContent = "Ajouter un agent";
   ["f_id", "f_nom", "f_prenom", "f_lieuDepart", "f_service", "f_trajet"].forEach((id) => (el(id).value = ""));
   el("f_societe").value = "CMG"; el("f_typeTransport").value = "BUS";
@@ -522,6 +523,7 @@ function openForm() {
   formModal.show();
 }
 function editRec(id) {
+  if (!requireEditor()) return;
   const r = RECORDS.find((x) => x.id === id); if (!r) return;
   el("formTitle").textContent = "Modifier un agent";
   el("f_id").value = r.id;
@@ -533,6 +535,7 @@ function editRec(id) {
   formModal.show();
 }
 async function saveForm() {
+  if (!requireEditor()) return;
   const data = {
     nom: el("f_nom").value.trim(),
     prenom: el("f_prenom").value.trim(),
@@ -554,6 +557,7 @@ async function saveForm() {
   } catch (e) { alert("Erreur: " + e.message); }
 }
 async function delRec(id) {
+  if (!requireEditor()) return;
   const r = RECORDS.find((x) => x.id === id);
   if (!(await askConfirm(`Supprimer ${r ? r.nom + " " + r.prenom : "cet agent"} ?`, "Supprimer"))) return;
   try {
@@ -566,6 +570,7 @@ async function delRec(id) {
 
 /* --- Exemples --- */
 async function loadSamples() {
+  if (!requireEditor()) return;
   if (!confirm("Charger " + SAMPLE.length + " agents d'exemple ?")) return;
   const batch = db.batch();
   SAMPLE.forEach((s) => batch.set(db.collection(COLLECTION).doc(), { ...s, createdAt: Date.now() }));
@@ -574,6 +579,7 @@ async function loadSamples() {
 
 /* --- Vider toute la liste --- */
 async function clearAll() {
+  if (!requireEditor()) return;
   if (!RECORDS.length) { alert("La liste est deja vide."); return; }
   if (!(await askConfirm(`Supprimer DEFINITIVEMENT les ${RECORDS.length} agents ? Cette action est irreversible.`, "Tout supprimer"))) return;
   setStatus("Suppression en cours...");
@@ -629,6 +635,7 @@ function rowsFromSheet(ws) {
   return { rows, headers: headers.map(String) };
 }
 el("importFile").addEventListener("change", async (e) => {
+  if (!requireEditor()) { e.target.value = ""; return; }
   const file = e.target.files[0]; if (!file) return;
   try {
     const buf = await file.arrayBuffer();
@@ -819,10 +826,237 @@ el("mapTrajet").addEventListener("change", renderMap);
 el("cartesQ").addEventListener("input", renderCartes);
 el("cartesDepart").addEventListener("change", renderCartes);
 
+/* ===== Authentification & roles ===== */
+let CURRENT_USER = null, CURRENT_ROLE = null, usersUnsub = null, appStarted = false;
+
+function isEditor() { return CURRENT_ROLE === "editeur"; }
+
+function requireEditor() {
+  if (!isEditor()) { alert("Action réservée aux éditeurs. Votre compte est en lecture seule."); return false; }
+  return true;
+}
+
+function applyRoleUI() {
+  const editor = isEditor();
+  document.body.classList.toggle("readonly", !editor);
+  el("navUsers").style.display = editor ? "" : "none";
+  el("userBox").style.setProperty("display", "flex", "important");
+  el("userEmail").textContent = CURRENT_USER ? CURRENT_USER.email : "";
+  const rb = el("userRole");
+  rb.textContent = editor ? "Éditeur" : "Consultation";
+  rb.className = "badge-t " + (editor ? "role-editeur" : "role-consultation");
+}
+
+function startAppData() {
+  if (appStarted) return;
+  appStarted = true;
+  listen();
+  listenVehicles();
+  if (isEditor()) listenUsers();
+}
+
+function guardAuth() {
+  if (!auth) { el("loadingOverlay").style.display = "none"; alert("Authentification indisponible."); return; }
+  auth.onAuthStateChanged(async (user) => {
+    if (!user) { location.href = "login.html"; return; }
+    try {
+      const doc = await db.collection(USERS_COLLECTION).doc(user.uid).get();
+      if (!doc.exists) { await auth.signOut(); location.href = "login.html?err=unauthorized"; return; }
+      CURRENT_USER = user;
+      CURRENT_ROLE = (doc.data().role === "editeur") ? "editeur" : "consultation";
+      applyRoleUI();
+      startAppData();
+    } catch (e) {
+      console.error("auth/role:", e);
+      el("loadingOverlay").style.display = "none";
+      alert("Erreur de vérification des droits : " + e.message);
+    }
+  });
+}
+
+async function doLogout() {
+  try { if (usersUnsub) usersUnsub(); } catch (e) {}
+  try { await auth.signOut(); } catch (e) {}
+  location.href = "login.html?out=1";
+}
+
+/* --- Gestion des utilisateurs (editeurs) --- */
+function listenUsers() {
+  if (usersUnsub) return;
+  usersUnsub = db.collection(USERS_COLLECTION).onSnapshot(
+    (snap) => {
+      const users = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      users.sort((a, b) => (a.email || "").localeCompare(b.email || ""));
+      renderUsers(users);
+    },
+    (e) => console.error("users:", e),
+  );
+}
+function renderUsers(users) {
+  const body = el("usersBody"); if (!body) return;
+  if (!users.length) { body.innerHTML = `<tr><td colspan="4" class="text-center py-3" style="color:#7fae91">Aucun utilisateur.</td></tr>`; return; }
+  body.innerHTML = users.map((u) => {
+    const ed = u.role === "editeur";
+    const me = CURRENT_USER && u.id === CURRENT_USER.uid;
+    const date = u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "—";
+    return `<tr>
+      <td class="fw-semibold">${u.email || u.id}${me ? ' <span style="color:#7fae91">(vous)</span>' : ""}</td>
+      <td><span class="badge-t ${ed ? "role-editeur" : "role-consultation"}">${ed ? "Éditeur" : "Consultation"}</span></td>
+      <td>${date}</td>
+      <td class="text-end">
+        <button class="btn btn-sm btn-outline-danger" ${me ? "disabled title='Vous ne pouvez pas retirer votre propre accès'" : ""} onclick="delUser('${u.id}','${(u.email || "").replace(/'/g, "")}')"><i class="bi bi-trash"></i></button>
+      </td></tr>`;
+  }).join("");
+}
+async function addUser() {
+  if (!requireEditor()) return;
+  const email = el("u_email").value.trim();
+  const pass = el("u_pass").value;
+  const role = el("u_role").value === "editeur" ? "editeur" : "consultation";
+  if (!email || pass.length < 6) { alert("Renseignez l'e-mail et un mot de passe d'au moins 6 caractères."); return; }
+  let secondary = null;
+  try {
+    // App Firebase secondaire pour creer le compte sans deconnecter l'admin
+    secondary = firebase.apps.find((a) => a.name === "userCreator") || firebase.initializeApp(firebaseConfig, "userCreator");
+    const cred = await secondary.auth().createUserWithEmailAndPassword(email, pass);
+    await db.collection(USERS_COLLECTION).doc(cred.user.uid).set({ email, role, createdAt: Date.now() });
+    await secondary.auth().signOut();
+    el("u_email").value = ""; el("u_pass").value = "";
+    setStatus("Utilisateur cree");
+    alert("Utilisateur créé : " + email + " (" + (role === "editeur" ? "Éditeur" : "Consultation") + ")");
+  } catch (e) {
+    let m = e.message;
+    if ((e.code || "").includes("email-already-in-use")) m = "Cet e-mail est déjà utilisé.";
+    if ((e.code || "").includes("weak-password")) m = "Mot de passe trop faible (6 caractères minimum).";
+    if ((e.code || "").includes("invalid-email")) m = "Adresse e-mail invalide.";
+    alert("Erreur : " + m);
+  } finally {
+    if (secondary) { try { await secondary.delete(); } catch (e) {} }
+  }
+}
+async function delUser(uid, email) {
+  if (!requireEditor()) return;
+  if (CURRENT_USER && uid === CURRENT_USER.uid) { alert("Vous ne pouvez pas retirer votre propre accès."); return; }
+  if (!(await askConfirm(`Retirer l'accès de ${email || uid} à l'application ?`, "Retirer"))) return;
+  try {
+    await db.collection(USERS_COLLECTION).doc(uid).delete();
+    setStatus("Accès retiré");
+  } catch (e) { alert("Erreur : " + e.message); }
+}
+
+/* ===== Bus & chauffeurs (flotte) ===== */
+let VEHICLES = [], vehiclesUnsub = null, busModal = null;
+
+function listenVehicles() {
+  if (vehiclesUnsub) return;
+  vehiclesUnsub = db.collection(VEHICLES_COLLECTION).onSnapshot(
+    (snap) => { VEHICLES = snap.docs.map((d) => ({ id: d.id, ...d.data() })); renderVehicles(); },
+    (e) => console.error("vehicles:", e),
+  );
+}
+function vehiclesFiltered() {
+  const q = norm(el("busQ") ? el("busQ").value : "");
+  if (!q) return VEHICLES;
+  return VEHICLES.filter((v) =>
+    [v.numero, v.matricule, v.trajet, v.chauffeur, v.telephone, v.type]
+      .map((x) => norm(x)).join(" ").includes(q));
+}
+function renderVehicles() {
+  const body = el("busBody"); if (!body) return;
+  const rows = vehiclesFiltered().slice().sort((a, b) =>
+    norm(a.numero + a.matricule).localeCompare(norm(b.numero + b.matricule)));
+  if (!rows.length) {
+    body.innerHTML = `<tr><td colspan="8" class="text-center py-4" style="color:#7fae91">
+      Aucun bus enregistré. <button class="btn btn-sm btn-primary ms-2 edit-only" onclick="openVehicleForm()">Ajouter un bus</button></td></tr>`;
+    return;
+  }
+  body.innerHTML = rows.map((v) => `
+    <tr>
+      <td><span class="badge-t ${typeClass(v.type)}">${v.type || ""}</span></td>
+      <td class="fw-semibold">${v.numero || ""}</td>
+      <td>${v.matricule || ""}</td>
+      <td>${v.trajet || ""}</td>
+      <td>${v.chauffeur || ""}</td>
+      <td>${v.telephone ? `<a href="tel:${(v.telephone + "").replace(/\s+/g, "")}" style="color:var(--accent)">${v.telephone}</a>` : ""}</td>
+      <td>${v.capacite ?? ""}</td>
+      <td class="text-end text-nowrap edit-only">
+        <button class="btn btn-sm btn-outline-light" onclick="editVehicle('${v.id}')"><i class="bi bi-pencil"></i></button>
+        <button class="btn btn-sm btn-outline-danger" onclick="delVehicle('${v.id}')"><i class="bi bi-trash"></i></button>
+      </td>
+    </tr>`).join("");
+}
+function openVehicleForm() {
+  if (!requireEditor()) return;
+  el("busFormTitle").textContent = "Ajouter un bus";
+  ["v_id", "v_numero", "v_matricule", "v_trajet", "v_chauffeur", "v_telephone", "v_capacite"].forEach((id) => (el(id).value = ""));
+  el("v_type").value = "BUS";
+  busModal.show();
+}
+function editVehicle(id) {
+  if (!requireEditor()) return;
+  const v = VEHICLES.find((x) => x.id === id); if (!v) return;
+  el("busFormTitle").textContent = "Modifier un bus";
+  el("v_id").value = v.id;
+  el("v_type").value = v.type || "BUS";
+  el("v_numero").value = v.numero || "";
+  el("v_matricule").value = v.matricule || "";
+  el("v_trajet").value = v.trajet || "";
+  el("v_chauffeur").value = v.chauffeur || "";
+  el("v_telephone").value = v.telephone || "";
+  el("v_capacite").value = v.capacite ?? "";
+  busModal.show();
+}
+async function saveVehicle() {
+  if (!requireEditor()) return;
+  const data = {
+    type: el("v_type").value,
+    numero: el("v_numero").value.trim(),
+    matricule: el("v_matricule").value.trim(),
+    trajet: el("v_trajet").value.trim(),
+    chauffeur: el("v_chauffeur").value.trim(),
+    telephone: el("v_telephone").value.trim(),
+    capacite: el("v_capacite").value === "" ? null : (Number(el("v_capacite").value) || 0),
+    updatedAt: Date.now(),
+  };
+  if (!data.matricule && !data.numero && !data.chauffeur) {
+    alert("Renseignez au moins le matricule, le n° du bus ou le chauffeur.");
+    return;
+  }
+  const id = el("v_id").value;
+  try {
+    if (id) await db.collection(VEHICLES_COLLECTION).doc(id).update(data);
+    else await db.collection(VEHICLES_COLLECTION).add({ ...data, createdAt: Date.now() });
+    busModal.hide();
+    setStatus("Bus enregistré");
+  } catch (e) { alert("Erreur: " + e.message); }
+}
+async function delVehicle(id) {
+  if (!requireEditor()) return;
+  const v = VEHICLES.find((x) => x.id === id);
+  const label = v ? (v.numero || v.matricule || v.chauffeur || "ce bus") : "ce bus";
+  if (!(await askConfirm(`Supprimer ${label} ?`, "Supprimer"))) return;
+  try { await db.collection(VEHICLES_COLLECTION).doc(id).delete(); setStatus("Bus supprimé"); }
+  catch (e) { alert("Erreur: " + e.message); }
+}
+function exportVehicles() {
+  if (!VEHICLES.length) { alert("Aucun bus à exporter."); return; }
+  const data = VEHICLES.map((v) => ({
+    TYPE: v.type || "", "N° BUS": v.numero || "", MATRICULE: v.matricule || "",
+    "LIGNE/TRAJET": v.trajet || "", CHAUFFEUR: v.chauffeur || "",
+    TELEPHONE: v.telephone || "", PLACES: v.capacite ?? "",
+  }));
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Bus");
+  XLSX.writeFile(wb, "bus_chauffeurs.xlsx");
+}
+
 /* --- Init --- */
 window.addEventListener("DOMContentLoaded", () => {
   formModal = new bootstrap.Modal(el("formModal"));
   confirmModal = new bootstrap.Modal(el("confirmModal"));
-  listen();
-  setTimeout(() => { if (el("loadingOverlay").style.display !== "none") el("loadingOverlay").style.display = "none"; }, 6000);
+  busModal = new bootstrap.Modal(el("busModal"));
+  if (el("busQ")) el("busQ").addEventListener("input", renderVehicles);
+  guardAuth();
+  setTimeout(() => { if (el("loadingOverlay").style.display !== "none") el("loadingOverlay").style.display = "none"; }, 8000);
 });
