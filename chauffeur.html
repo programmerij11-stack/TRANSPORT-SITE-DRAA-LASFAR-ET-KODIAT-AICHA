@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chauffeur · Partage GPS</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js?v=20260728"></script>
+  <style>
+    :root{--accent:#22c55e}
+    body{margin:0;background:#050a07;color:#e7f2ec;font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh}
+    .wrap{max-width:520px;margin:0 auto;padding:1.25rem}
+    .brand{display:flex;align-items:center;gap:.6rem;margin-bottom:1rem}
+    .brand i{font-size:1.6rem;color:var(--accent)}
+    .card-dark{background:#0c1611;border:1px solid rgba(34,197,94,.2);border-radius:.9rem;padding:1.1rem}
+    label{font-size:.85rem;color:#7fae91}
+    .form-control,.form-select{background:#08120c;border:1px solid rgba(34,197,94,.25);color:#e7f2ec}
+    .form-control:focus,.form-select:focus{background:#08120c;border-color:var(--accent);color:#e7f2ec;box-shadow:0 0 0 .15rem rgba(34,197,94,.2)}
+    .btn-primary{background:linear-gradient(135deg,#22c55e,#16a34a);border:none;color:#04140c;font-weight:700}
+    .btn-danger{font-weight:700}
+    .big-btn{font-size:1.15rem;padding:.9rem}
+    .status{border-radius:.75rem;padding:.9rem 1rem;margin-top:1rem;font-size:.95rem}
+    .st-idle{background:rgba(100,116,139,.15);border:1px solid #64748b}
+    .st-on{background:rgba(34,197,94,.14);border:1px solid var(--accent);color:#bbf7d0}
+    .st-err{background:rgba(239,68,68,.14);border:1px solid #ef4444;color:#fecaca}
+    .pulse{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--accent);margin-right:.4rem;animation:pulse 1.2s infinite}
+    @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(34,197,94,.6)}70%{box-shadow:0 0 0 10px rgba(34,197,94,0)}100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}}
+    .kv{font-size:.85rem;color:#9fc7b1;margin-top:.35rem}
+    .kv b{color:#e7f2ec}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">
+    <i class="bi bi-geo-alt-fill"></i>
+    <div><div style="font-weight:700">Partage GPS — Chauffeur</div>
+      <small style="color:#7fae91">Transport Draa Lasfar &amp; Koudiat Aicha</small></div>
+  </div>
+
+  <div class="card-dark">
+    <div class="mb-3">
+      <label class="mb-1">Type de véhicule</label>
+      <select class="form-select" id="type">
+        <option value="BUS">🚌 Bus</option>
+        <option value="MINI BUS">🚐 Mini bus</option>
+      </select>
+    </div>
+    <div class="mb-3">
+      <label class="mb-1">Nom / numéro du véhicule</label>
+      <input class="form-control" id="label" placeholder="ex. BUS 1 - Mhamid Bouaakaz" list="busList">
+      <datalist id="busList">
+        <option>BUS 1</option><option>BUS 2</option>
+        <option>MINI BUS 1</option><option>MINI BUS 2</option><option>MINI BUS 3</option>
+        <option>MINI BUS 4</option><option>MINI BUS 5</option><option>MINI BUS 6</option>
+      </datalist>
+    </div>
+    <div class="mb-3">
+      <label class="mb-1">Trajet (optionnel)</label>
+      <input class="form-control" id="trajet" placeholder="ex. MHAMID 10 → Draa Lasfar">
+    </div>
+
+    <button class="btn btn-primary w-100 big-btn" id="startBtn" onclick="startShare()">
+      <i class="bi bi-broadcast"></i> Démarrer le partage</button>
+    <button class="btn btn-danger w-100 big-btn d-none" id="stopBtn" onclick="stopShare()">
+      <i class="bi bi-stop-circle"></i> Arrêter le partage</button>
+
+    <div class="status st-idle" id="status">
+      <i class="bi bi-info-circle"></i> Choisis ton véhicule puis démarre le partage.
+      Ton téléphone demandera l'autorisation de localisation.
+    </div>
+    <div class="kv d-none" id="coords"></div>
+  </div>
+
+  <p class="mt-3" style="font-size:.8rem;color:#7fae91">
+    Garde cette page <b>ouverte</b> pendant le trajet pour continuer à envoyer ta position.
+    La position est visible par l'administration dans l'onglet <b>Suivi GPS</b>.
+  </p>
+</div>
+
+<script>
+  const POSITIONS = "transport_positions";
+  let watchId = null;
+  let docRef = null;
+
+  function slug(s){ return (s||"").toString().trim().toUpperCase().replace(/[^A-Z0-9]+/g,"_").replace(/^_|_$/g,"") || "VEHICULE"; }
+  function setStatus(cls, html){ const s=document.getElementById("status"); s.className="status "+cls; s.innerHTML=html; }
+
+  async function startShare(){
+    const label = document.getElementById("label").value.trim();
+    const type = document.getElementById("type").value;
+    const trajet = document.getElementById("trajet").value.trim();
+    if(!label){ setStatus("st-err", '<i class="bi bi-exclamation-triangle"></i> Renseigne le nom / numéro du véhicule.'); return; }
+    if(!("geolocation" in navigator)){ setStatus("st-err", '<i class="bi bi-x-circle"></i> Ce navigateur ne supporte pas la géolocalisation.'); return; }
+
+    docRef = db.collection(POSITIONS).doc(slug(label));
+    setStatus("st-idle", '<span class="pulse"></span> Autorisation de localisation en cours…');
+
+    watchId = navigator.geolocation.watchPosition(
+      async (pos)=>{
+        const { latitude, longitude, accuracy, speed, heading } = pos.coords;
+        try{
+          await docRef.set({
+            label, type, trajet,
+            lat: latitude, lng: longitude,
+            accuracy: accuracy || null,
+            speed: (typeof speed === "number") ? speed : null,
+            heading: (typeof heading === "number") ? heading : null,
+            active: true,
+            updatedAt: Date.now(),
+          }, { merge: true });
+          setStatus("st-on", '<span class="pulse"></span> <b>Partage actif</b> — ta position est envoyée en temps réel.');
+          const c = document.getElementById("coords");
+          c.classList.remove("d-none");
+          c.innerHTML = `Position : <b>${latitude.toFixed(5)}, ${longitude.toFixed(5)}</b><br>Précision : <b>${accuracy ? Math.round(accuracy)+' m' : '—'}</b> · maj : <b>${new Date().toLocaleTimeString()}</b>`;
+        }catch(e){ setStatus("st-err", '<i class="bi bi-x-circle"></i> Erreur d\'envoi : '+e.message); }
+      },
+      (err)=>{
+        let msg = err.message;
+        if(err.code === 1) msg = "Autorisation refusée. Active la localisation pour cette page.";
+        if(err.code === 2) msg = "Position indisponible. Vérifie le GPS.";
+        if(err.code === 3) msg = "Délai dépassé. Réessaie.";
+        setStatus("st-err", '<i class="bi bi-x-circle"></i> '+msg);
+      },
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 }
+    );
+
+    document.getElementById("startBtn").classList.add("d-none");
+    document.getElementById("stopBtn").classList.remove("d-none");
+  }
+
+  async function stopShare(){
+    if(watchId !== null){ navigator.geolocation.clearWatch(watchId); watchId = null; }
+    if(docRef){ try{ await docRef.set({ active:false, updatedAt: Date.now() }, { merge:true }); }catch(e){} }
+    setStatus("st-idle", '<i class="bi bi-info-circle"></i> Partage arrêté.');
+    document.getElementById("coords").classList.add("d-none");
+    document.getElementById("stopBtn").classList.add("d-none");
+    document.getElementById("startBtn").classList.remove("d-none");
+  }
+
+  window.addEventListener("beforeunload", ()=>{
+    if(docRef){ try{ docRef.set({ active:false, updatedAt: Date.now() }, { merge:true }); }catch(e){} }
+  });
+</script>
+</body>
+</html>

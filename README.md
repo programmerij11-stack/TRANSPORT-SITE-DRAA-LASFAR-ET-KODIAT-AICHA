@@ -30,10 +30,28 @@ charger toute la liste d'un coup.
 3. Choisissez la branche `main` et le dossier `/ (root)`, puis **Save**.
 4. Le site sera disponible sur `https://<votre-utilisateur>.github.io/transport-draa-lasfar/`.
 
+## Suivi GPS en temps réel
+
+Onglet **Suivi GPS** : affiche sur une carte la position en direct des bus / mini bus
+qui partagent leur GPS, avec l'heure de dernière mise à jour et la liste des véhicules
+(en ligne / hors ligne).
+
+Le chauffeur ouvre `chauffeur.html` sur son téléphone (bouton **Ouvrir la page
+Chauffeur**), choisit son véhicule et clique **Démarrer le partage** : le navigateur
+demande l'autorisation de localisation puis envoie la position via l'API `geolocation`
+du navigateur dans la collection Firestore **`transport_positions`** (une position par
+véhicule). Un véhicule est considéré **actif** si sa dernière position date de moins de
+2 minutes.
+
+> La géolocalisation du navigateur exige un contexte **sécurisé** (HTTPS) ; c'est le cas
+> de GitHub Pages et de `localhost`. La page Chauffeur doit rester **ouverte** pendant le
+> trajet pour continuer à émettre la position.
+
 ## Firebase
 
 Le fichier `firebase-config.js` réutilise le même projet Firebase que SAMIR, mais dans
-une **collection séparée** (`transport_personnel`) pour ne pas mélanger les données.
+des **collections séparées** (`transport_personnel` pour le personnel, `transport_positions`
+pour les positions GPS) pour ne pas mélanger les données.
 Pour utiliser un projet Firebase distinct, remplacez les valeurs dans `firebase-config.js`.
 
 ## Développement local
